@@ -42,36 +42,34 @@ model.add(tf.layers.dense({ units: 10, activation: 'softmax' })); // 10 categori
 
 model.compile({ optimizer: tf.train.adam(), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
 
-// Dynamically load dataset from GitHub repository
 async function loadDataset() {
     const dataset = [];
     const categories = [
-        'bagset', 'dontreadrepeat', 'finished', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+        'bagset', 'dontreadrepeat', 'finished', 'index', 'pageno', 
+        'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
 
-  const basePath = "./dataset/";  // Adjust based on your project structure
-const fileCounts = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
-    // GitHub API URL to list directory contents
-    const repoBaseUrl = 'https://api.github.com/repos/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/contents/dataset';
+    const baseDir = 'dataset/'; // Path relative to your GitHub-hosted environment
 
-    // Iterate over categories and fetch images from GitHub
     for (const category of categories) {
-        
-        for (var i = 0; i < fileCounts.length(); i++){
-                // Loop through file names and prepare dataset
-            var fileCount = fileCounts[i]l
-            for (var j = 0; j < fileCount; j++){
-              file = 
-              if (file.type === 'file') {
+        let index = 1;
+        while (true) {
+            const imageUrl = `${baseDir}${category}/${category} ${index}.jpg`;
+
+            try {
+                const response = await fetch(imageUrl, { method: 'HEAD' });
+                if (!response.ok) break; // Stop fetching when file doesn't exist
+
                 dataset.push({
-                    path: file.download_url,  // Direct link to the image in GitHub
-                    label: categories.indexOf(category) // Assign label based on category index
+                    path: imageUrl,
+                    label: categories.indexOf(category)
                 });
-            }
-            }
 
+                index++;
+            } catch (error) {
+                break; // Stop when no more files are found
+            }
         }
-
     }
 
     const imageTensors = [];
