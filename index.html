@@ -4,7 +4,7 @@
 <input type="file" id="imageUpload" multiple>
 <div id="testlog"></div>
 <script>
-var testlog = document.getElementByID("testlog");
+var testlog = document.getElementById("testlog");
 // Ensure WebGPU Backend for TensorFlow.js
 async function setupBackend() {
     await tf.setBackend('webgpu'); // Enables Vulkan-based GPU acceleration
