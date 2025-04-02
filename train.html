@@ -1,5 +1,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <input type="file" id="imageUpload" multiple>
 <script>
 
@@ -105,22 +106,53 @@ async function trainModel() {
 
     console.log("Training complete!");
 }
+async function classifyExtractedImages(pdfUrl) {
+    const images = await extractImagesFromPDF(pdfUrl);
 
-// Classify a new LEGO instruction image
-async function classifyImage(url) {
-    const img = await loadImage(url);
-    const tensor = await processImage(img);
-    const prediction = model.predict(tensor);
-    const classIndex = prediction.argMax(1).dataSync()[0];
-    console.log(`Predicted category: ${classIndex}`);
+    for (const imgSrc of images) {
+        const img = new Image();
+        img.src = imgSrc;
+
+        img.onload = async () => {
+            const tensor = await processImage(img);
+            const prediction = model.predict(tensor);
+            const classIndex = prediction.argMax(1).dataSync()[0];
+
+            console.log(`Detected category: ${classIndex}`);
+        };
+    }
+}
+async function extractImagesFromPDF(pdfUrl) {
+    const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+    const numPages = pdf.numPages;
+    const extractedImages = [];
+
+    for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+
+        // Render the page onto a canvas
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // Convert canvas to an image and store it
+        const imgSrc = canvas.toDataURL("image/jpeg");
+        extractedImages.push(imgSrc);
+    }
+
+    return extractedImages;
 }
 
 // jQuery UI for uploading & predicting images
 $(document).ready(() => {
-    $("#uploadBtn").on("change", async function(event) {
+    $("#imaageUpload").on("change", async function(event) {
         const file = event.target.files[0];
         const url = URL.createObjectURL(file);
-        classifyImage(url);
+        classifyExtractedImages(url);
     });
 });
 </script>
