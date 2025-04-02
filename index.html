@@ -2,8 +2,9 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <input type="file" id="imageUpload" multiple>
+<div id="testlog"></div>
 <script>
-
+var testlog = document.getElementByID("testlog");
 // Ensure WebGPU Backend for TensorFlow.js
 async function setupBackend() {
     await tf.setBackend('webgpu'); // Enables Vulkan-based GPU acceleration
@@ -20,6 +21,7 @@ async function loadImage(url) {
         img.src = url;
         img.onload = () => resolve(img);
     });
+    testlog.innerHTML = testlog.innerHTML + "<br><br>done with loadImage)";
 }
 
 // Convert image to TensorFlow.js tensor
@@ -59,7 +61,6 @@ async function loadDataset() {
         category = categories[j];
         jth = indices[j];
         for (var i = 1; i <= jth; i++){
-        while (true) {
             const imageUrl = `${baseDir}${category}/${category} ${i}.jpg`;
 
             try {
@@ -73,7 +74,7 @@ async function loadDataset() {
             } catch (error) {
                 break; // Stop when no more files are found
             }
-        }
+    testlog.innerHTML = testlog.innerHTML + "<br><br>pushed " + category + " " + i;
         }
     }
 
@@ -85,6 +86,7 @@ async function loadDataset() {
         const tensor = await processImage(img);
         imageTensors.push(tensor);
         labels.push(item.label);
+            testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + category + " " + i;
     }
 
     return {
@@ -104,7 +106,7 @@ async function trainModel() {
         callbacks: tf.callbacks.earlyStopping({ patience: 3 })
     });
 
-    console.log("Training complete!");
+        testlog.innerHTML = testlog.innerHTML + "<br><br> Training Complete";
 }
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
@@ -118,7 +120,7 @@ async function classifyExtractedImages(pdfUrl) {
             const prediction = model.predict(tensor);
             const classIndex = prediction.argMax(1).dataSync()[0];
 
-            console.log(`Detected category: ${classIndex}`);
+                testlog.innerHTML = testlog.innerHTML + "<br><br>Detected category " + classIndex;
         };
     }
 }
@@ -149,6 +151,7 @@ async function extractImagesFromPDF(pdfUrl) {
 
 // jQuery UI for uploading & predicting images
 $(document).ready(() => {
+    trainModel();
     $("#imaageUpload").on("change", async function(event) {
         const file = event.target.files[0];
         const url = URL.createObjectURL(file);
