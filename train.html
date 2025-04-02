@@ -1,0 +1,124 @@
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<input type="file" id="imageUpload" multiple>
+<script>
+
+// Ensure WebGPU Backend for TensorFlow.js
+async function setupBackend() {
+    await tf.setBackend('webgpu'); // Enables Vulkan-based GPU acceleration
+    console.log(`Using backend: ${tf.getBackend()}`);
+}
+
+setupBackend();
+
+// Load image and convert to tensor
+async function loadImage(url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous"; // To prevent CORS issues
+        img.src = url;
+        img.onload = () => resolve(img);
+    });
+}
+
+// Convert image to TensorFlow.js tensor
+async function processImage(img) {
+    return tf.browser.fromPixels(img)
+        .resizeNearestNeighbor([128, 128]) // Resize to match model input size
+        .toFloat()
+        .div(tf.scalar(255)) // Normalize pixel values
+        .expandDims(); // Add batch dimension
+}
+
+// Define the CNN Model
+const model = tf.sequential();
+model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.flatten());
+model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+model.add(tf.layers.dense({ units: 10, activation: 'softmax' })); // 10 categories (adjust as needed)
+
+model.compile({ optimizer: tf.train.adam(), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+
+// Dynamically load dataset from GitHub repository
+async function loadDataset() {
+    const dataset = [];
+    const categories = [
+        'bagset', 'dontreadrepeat', 'finished', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+    ];
+
+  const basePath = "./dataset/";  // Adjust based on your project structure
+const fileCounts = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+    // GitHub API URL to list directory contents
+    const repoBaseUrl = 'https://api.github.com/repos/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME/contents/dataset';
+
+    // Iterate over categories and fetch images from GitHub
+    for (const category of categories) {
+        
+        for (var i = 0; i < fileCounts.length(); i++){
+                // Loop through file names and prepare dataset
+            var fileCount = fileCounts[i]l
+            for (var j = 0; j < fileCount; j++){
+              file = 
+              if (file.type === 'file') {
+                dataset.push({
+                    path: file.download_url,  // Direct link to the image in GitHub
+                    label: categories.indexOf(category) // Assign label based on category index
+                });
+            }
+            }
+
+        }
+
+    }
+
+    const imageTensors = [];
+    const labels = [];
+
+    for (const item of dataset) {
+        const img = await loadImage(item.path);
+        const tensor = await processImage(img);
+        imageTensors.push(tensor);
+        labels.push(item.label);
+    }
+
+    return {
+        xs: tf.stack(imageTensors),
+        ys: tf.oneHot(tf.tensor1d(labels, 'int32'), 10)
+    };
+}
+
+// Train the model
+async function trainModel() {
+    const { xs, ys } = await loadDataset();
+
+    await model.fit(xs, ys, {
+        epochs: 20,
+        batchSize: 16,
+        validationSplit: 0.2,
+        callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+    });
+
+    console.log("Training complete!");
+}
+
+// Classify a new LEGO instruction image
+async function classifyImage(url) {
+    const img = await loadImage(url);
+    const tensor = await processImage(img);
+    const prediction = model.predict(tensor);
+    const classIndex = prediction.argMax(1).dataSync()[0];
+    console.log(`Predicted category: ${classIndex}`);
+}
+
+// jQuery UI for uploading & predicting images
+$(document).ready(() => {
+    $("#uploadBtn").on("change", async function(event) {
+        const file = event.target.files[0];
+        const url = URL.createObjectURL(file);
+        classifyImage(url);
+    });
+});
+</script>
