@@ -48,16 +48,18 @@ async function loadDataset() {
         'bagset', 'dontreadrepeat', 'finished', 'index', 'pageno', 
         'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
-    const indexes = [
+    const indices = [
         5, 2, 2, 4, 4, 
         26, 18, 4, 2, 6
     ];
     const baseDir = 'dataset/'; // Path relative to your GitHub-hosted environment
 
-    for (const category of categories) {
-        let index = 1;
+    for (var j = 0; j < categories.length; j++) {
+        category = categories[j];
+        jth = indices[j];
+        for (var i = 1; i <= jth; i++){
         while (true) {
-            const imageUrl = `${baseDir}${category}/${category} ${index}.jpg`;
+            const imageUrl = `${baseDir}${category}/${category} ${i}.jpg`;
 
             try {
                 const response = await fetch(imageUrl, { method: 'HEAD' });
@@ -67,11 +69,10 @@ async function loadDataset() {
                     path: imageUrl,
                     label: categories.indexOf(category)
                 });
-
-                index++;
             } catch (error) {
                 break; // Stop when no more files are found
             }
+        }
         }
     }
 
