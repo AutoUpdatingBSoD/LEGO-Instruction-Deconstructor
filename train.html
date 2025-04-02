@@ -32,7 +32,7 @@ async function processImage(img) {
 
 // Define the CNN Model
 const model = tf.sequential();
-model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.conv2d({ inputShape: 256, 256, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
 model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
@@ -48,7 +48,10 @@ async function loadDataset() {
         'bagset', 'dontreadrepeat', 'finished', 'index', 'pageno', 
         'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
-
+    const indexes = [
+        5, 2, 2, 4, 4, 
+        26, 18, 4, 2, 6
+    ];
     const baseDir = 'dataset/'; // Path relative to your GitHub-hosted environment
 
     for (const category of categories) {
