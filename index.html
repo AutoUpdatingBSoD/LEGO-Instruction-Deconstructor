@@ -61,7 +61,7 @@ async function loadDataset() {
         category = categories[j];
         jth = indices[j];
         for (var i = 1; i <= jth; i++){
-            const imageUrl = `${baseDir}${category}/${category} ${i}.jpg`;
+            const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
 
             try {
                 const response = await fetch(imageUrl, { method: 'HEAD' });
