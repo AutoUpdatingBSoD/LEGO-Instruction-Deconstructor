@@ -157,6 +157,7 @@ async function extractImagesFromPDF(pdfUrl) {
 $(document).ready(() => {
     trainModel();
     $("#imaageUpload").on("change", async function(event) {
+        alert($(this).val());
         const file = event.target.files[0];
         const url = URL.createObjectURL(file);
         classifyExtractedImages(url);
