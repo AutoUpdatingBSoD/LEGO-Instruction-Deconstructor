@@ -155,12 +155,15 @@ async function extractImagesFromPDF(pdfUrl) {
 
 // jQuery UI for uploading & predicting images
 $(document).ready(() => {
-    trainModel();
-    $("#imaageUpload").on("change", async function(event) {
+    $("#imageUpload").addEventListener('click', () => {
+          $("#imageUpload").value = null;
+    });
+    $("#imageUpload").on("change", async function(event) {
         alert($(this).val());
         const file = event.target.files[0];
         const url = URL.createObjectURL(file);
         classifyExtractedImages(url);
     });
+        trainModel();
 });
 </script>
