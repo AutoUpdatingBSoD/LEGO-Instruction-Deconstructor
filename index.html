@@ -30,7 +30,7 @@ async function processImage(img) {
         .resizeNearestNeighbor([128, 128]) // Resize to match model input size
         .toFloat()
         .div(tf.scalar(255)) // Normalize pixel values
-        .expandDims(); // Add batch dimension
+        .expandDims(0); // Ensure correct batch dimension (1, 128, 128, 3)
 }
 
 // Define the CNN Model
@@ -64,7 +64,7 @@ async function loadDataset() {
             const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
 
             try {
-                const response = await fetch(imageUrl, { method: 'HEAD' }).expandDims();
+                const response = await fetch(imageUrl, { method: 'HEAD' });
                 if (!response.ok) break; // Stop fetching when file doesn't exist
 
                 dataset.push({
