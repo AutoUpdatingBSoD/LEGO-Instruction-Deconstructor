@@ -7,7 +7,7 @@
 var testlog = document.getElementById("testlog");
 // Ensure WebGPU Backend for TensorFlow.js
 async function setupBackend() {
-    await tf.setBackend('webgpu'); // Enables Vulkan-based GPU acceleration
+    await tf.setBackend('webgl'); // Enables Vulkan-based GPU acceleration
     console.log(`Using backend: ${tf.getBackend()}`);
 }
 
