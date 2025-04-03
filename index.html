@@ -35,7 +35,7 @@ async function processImage(img) {
 
 // Define the CNN Model
 const model = tf.sequential();
-model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.conv2d({ inputShape: [128, 128], filters: 32, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
 model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
