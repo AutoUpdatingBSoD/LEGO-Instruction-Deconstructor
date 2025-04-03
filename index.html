@@ -144,6 +144,8 @@ async function extractImagesFromPDF(pdfUrl) {
         // Convert canvas to an image and store it
         const imgSrc = canvas.toDataURL("image/jpeg");
         extractedImages.push(imgSrc);
+        testlog.innerHTML = testlog.innerHTML + "<br><br>Read page " + i;
+      
     }
 
     return extractedImages;
