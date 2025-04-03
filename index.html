@@ -30,7 +30,6 @@ async function processImage(img) {
         .resizeNearestNeighbor([128, 128]) // Resize to match model input size
         .toFloat()
         .div(tf.scalar(255)) // Normalize pixel values
-        .expandDims(0); // Ensure correct batch dimension (1, 128, 128, 3)
 }
 
 // Define the CNN Model
