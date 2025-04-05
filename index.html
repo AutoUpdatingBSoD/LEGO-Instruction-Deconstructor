@@ -145,7 +145,7 @@ async function loadDataset() {
 // Train the model
 async function trainModel() {
     const { xs, ys } = await loadDataset();
-    testlog.innerHTML = testlog.innerHTML + "<br><br>started training" + xs;
+    testlog.innerHTML = testlog.innerHTML + "<br><br>started training";
     await model.fit(xs, ys, {
         epochs: 20,
         batchSize: 16,
@@ -181,13 +181,13 @@ async function classifyExtractedImages(pdfUrl) {
     }
 }
 async function extractImagesFromPDF(pdfUrl) {
-    //testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading pages ";
+    testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading pages ";
     const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
     const numPages = pdf.numPages;
     const extractedImages = [];
 
     for (let i = 1; i <= numPages; i++) {
-                testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading page " + i;
+        //testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading page " + i;
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 2.0 });
 
