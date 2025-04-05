@@ -161,9 +161,10 @@ async function classifyExtractedImages(pdfUrl) {
     for (const imgSrc of images) {
         const img = new Image();
         img.src = imgSrc;
+        const tensor = await processImage2(img); // Add await here
+        console.log("Shape of tensor:", tensor.shape);
 
-        img.onload = async () => {
-            const tensor = processImage2(img);
+        if (tensor) {
             console.log("Shape of tensor:", tensor.shape);
             //const prediction = model.predict(tensor);
             //const predictionData = await prediction.data();
@@ -176,7 +177,7 @@ async function classifyExtractedImages(pdfUrl) {
             //    predictedCategories.forEach(categoryIndex => {
             //        testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
             //    });
-        };
+        }
     }
 }
 async function extractImagesFromPDF(pdfUrl) {
