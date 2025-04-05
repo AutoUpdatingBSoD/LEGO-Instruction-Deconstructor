@@ -15,6 +15,7 @@ setupBackend();
 
 // Load image and convert to tensor
 async function loadImage(url) {
+
     return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = "anonymous"; // To prevent CORS issues
@@ -117,7 +118,7 @@ async function trainModel() {
 }
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
-
+    var j = 0;
     for (const imgSrc of images) {
         const img = new Image();
         img.src = imgSrc;
@@ -127,8 +128,9 @@ async function classifyExtractedImages(pdfUrl) {
             const prediction = model.predict(tensor);
             const classIndex = prediction.argMax(1).dataSync()[0];
 
-                testlog.innerHTML = testlog.innerHTML + "<br><br>Detected category " + classIndex;
+                testlog.innerHTML = testlog.innerHTML + "<br><br>Detected category " + classIndex + " " + j;
         };
+        j++;
     }
 }
 async function extractImagesFromPDF(pdfUrl) {
