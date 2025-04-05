@@ -94,35 +94,44 @@ async function loadDataset() {
         const tensor = await processImage(img);
         imageTensors.push(tensor);
         const labelVector = new Array(categories.length).fill(0);
-        if (item.label == 0){
-            labelVector[item.label] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0];            
+        if (item.label == 0) {
+            labelVector[0] = 1;
         }
-        if (item.label == 1){
-            labelVector[item.label] = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0];            
+        if (item.label == 1) {
+            labelVector[1] = 1;
         }
-        if (item.label == 2){
-            labelVector[item.label] = [0, 0, 1, 0, 1, 0, 0, 0, 0, 0];            
+        if (item.label == 2) {
+            labelVector[2] = 1;
+            labelVector[4] = 1;
         }
-        if (item.label == 3){
-            labelVector[item.label] = [0, 0, 0, 1, 1, 1, 0, 1, 0, 0];            
+        if (item.label == 3) {
+            labelVector[3] = 1;
+            labelVector[4] = 1;
+            labelVector[5] = 1;
+            labelVector[7] = 1;
         }
-        if (item.label == 4){
-            labelVector[item.label] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0];            
+        if (item.label == 4) {
+            labelVector[4] = 1;
         }
-        if (item.label == 5){
-            labelVector[item.label] = [0, 0, 0, 0, 0, 1, 0, 1, 0, 0];            
+        if (item.label == 5) {
+            labelVector[5] = 1;
+            labelVector[7] = 1;
         }
-        if (item.label == 6){
-            labelVector[item.label] = [0, 0, 0, 0, 0, 0, 1, 1, 0, 0];            
+        if (item.label == 6) {
+            labelVector[6] = 1;
+            labelVector[7] = 1;
         }
-        if (item.label == 7){
-            labelVector[item.label] = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0];            
+        if (item.label == 7) {
+            labelVector[7] = 1;
         }
-        if (item.label == 8){
-            labelVector[item.label] = [0, 0, 0, 0, 1, 0, 0, 0, 1, 0];            
+        if (item.label == 8) {
+            labelVector[4] = 1;
+            labelVector[8] = 1;
         }
         if (item.label == 9){
-            labelVector[item.label] = [0, 1, 0, 0, 0, 0, 0, 0, 0, 1];            
+            labelVector[2] = 1;
+            labelVector[9] = 1;
+        };            
         }
         labels.push(labelVector);
             testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
