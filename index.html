@@ -130,7 +130,7 @@ async function loadDataset() {
 
     return {
         xs: tf.stack(imageTensors),
-        ys: tf.oneHot(tf.tensor1d(labels, 'int32'), 10)
+        ys: tf.tensor2d(labels) // [num_samples, 10]
     };
 }
 
