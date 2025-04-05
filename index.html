@@ -82,7 +82,7 @@ async function loadDataset() {
                 testlog.innerHTML = testlog.innerHTML + "<br><br>error " + category + " " + i;
                 break; // Stop when no more files are found
             }
-           testlog.innerHTML = testlog.innerHTML + "<br><br>pushed " + category + " " + i;
+           //testlog.innerHTML = testlog.innerHTML + "<br><br>pushed " + category + " " + i;
         }
     }
 
@@ -133,7 +133,7 @@ async function loadDataset() {
             labelVector[9] = 1;
         }            
         labels.push(labelVector);
-            testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
+            //testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
     }
 
     return {
@@ -180,7 +180,7 @@ async function classifyExtractedImages(pdfUrl) {
     }
 }
 async function extractImagesFromPDF(pdfUrl) {
-    testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading pages ";
+    //testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading pages ";
     const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
     const numPages = pdf.numPages;
     const extractedImages = [];
@@ -201,7 +201,7 @@ async function extractImagesFromPDF(pdfUrl) {
         // Convert canvas to an image and store it
         const imgSrc = canvas.toDataURL("image/jpeg");
         extractedImages.push(imgSrc);
-        testlog.innerHTML = testlog.innerHTML + "<br><br>Read page " + i;
+        //testlog.innerHTML = testlog.innerHTML + "<br><br>Read page " + i;
       
     }
 
