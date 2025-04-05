@@ -96,6 +96,19 @@ async function loadDataset() {
         const tensor = await processImage(img);
         imageTensors.push(tensor);
         const labelVector = new Array(categories.length).fill(0);
+
+            //testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
+    }
+    // Processing dataset into tensors
+    const imageTensors = [];
+    const labels = [];
+
+    for (const item of dataset) {
+        const img = await loadImage(item.path);
+        const tensor = await processImage(img);
+        imageTensors.push(tensor);
+        const labelVector = new Array(categories.length).fill(0);
+        labelVector[item.label] = 1; // One-hot encoding labels
         if (item.label == 0) {
             labelVector[0] = 1;
         }
@@ -133,11 +146,14 @@ async function loadDataset() {
         if (item.label == 9){
             labelVector[2] = 1;
             labelVector[9] = 1;
-        }            
+        }           
         labels.push(labelVector);
-            //testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
     }
 
+    return {
+        xs: tf.stack(imageTensors),
+        ys: tf.tensor2d(labels)
+    };
     return {
         xs: tf.stack(imageTensors),
         ys: tf.tensor2d(labels) // [num_samples, 10]
@@ -159,29 +175,28 @@ async function trainModel() {
 }
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
-    var j = 0;
     for (const imgSrc of images) {
         const img = new Image();
         img.src = imgSrc;
-        img.onload = async () => {
-            const tensor = await processImage2(img); // Add await here
-            console.log("Shape of tensor:", tensor.shape);
 
+        img.onload = async () => {
+            const tensor = await processImage2(img); // Make sure to await
             if (tensor) {
+                console.log("Tensor shape:", tensor.shape);
+                // Make prediction
                 const prediction = model.predict(tensor);
                 const predictionData = await prediction.data();
                 const threshold = 0.5;
-    
+
                 const predictedCategories = predictionData
                     .map((val, idx) => (val > threshold ? idx : -1))
                     .filter(idx => idx !== -1);
-    
+
                 predictedCategories.forEach(categoryIndex => {
                     testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
                 });
-            }
-            else {
-                console.error("Tensor is undefined");
+            } else {
+                console.error("Failed to process image.");
             }
         };
     }
@@ -221,11 +236,14 @@ $(document).ready(() => {
           $("#imageUpload").val() = null;
     });
     $("#imageUpload").on("change", async function(event) {
-        alert($(this).val());
         const file = event.target.files[0];
-        const url = URL.createObjectURL(file);
-        classifyExtractedImages(url);
-    });
-        trainModel();
+        if (file) {
+            const url = URL.createObjectURL(file);
+            console.log("Uploaded image:", url);
+            await classifyExtractedImages(url);
+        }
+
+    // Optionally train the model if needed
+    trainModel();
 });
 </script>
