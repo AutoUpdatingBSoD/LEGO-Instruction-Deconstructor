@@ -163,22 +163,27 @@ async function classifyExtractedImages(pdfUrl) {
     for (const imgSrc of images) {
         const img = new Image();
         img.src = imgSrc;
-        const tensor = await processImage2(img); // Add await here
-        console.log("Shape of tensor:", tensor.shape);
+        img.onload = async () => {
+            const tensor = await processImage2(img); // Add await here
+            console.log("Shape of tensor:", tensor.shape);
 
-        if (tensor) {
-            const prediction = model.predict(tensor);
-            const predictionData = await prediction.data();
-            const threshold = 0.5;
-
-            const predictedCategories = predictionData
-                .map((val, idx) => (val > threshold ? idx : -1))
-                .filter(idx => idx !== -1);
-
-            predictedCategories.forEach(categoryIndex => {
-                testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
-            });
-        }
+            if (tensor) {
+                const prediction = model.predict(tensor);
+                const predictionData = await prediction.data();
+                const threshold = 0.5;
+    
+                const predictedCategories = predictionData
+                    .map((val, idx) => (val > threshold ? idx : -1))
+                    .filter(idx => idx !== -1);
+    
+                predictedCategories.forEach(categoryIndex => {
+                    testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
+                });
+            }
+            else {
+                console.error("Tensor is undefined");
+            }
+        };
     }
 }
 async function extractImagesFromPDF(pdfUrl) {
