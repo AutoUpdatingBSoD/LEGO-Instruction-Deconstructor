@@ -97,18 +97,6 @@ async function loadDataset() {
         const tensor = await processImage(img);
         imageTensors.push(tensor);
         const labelVector = new Array(categories.length).fill(0);
-
-            //testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
-    }
-    // Processing dataset into tensors
-    const imageTensors = [];
-    const labels = [];
-
-    for (const item of dataset) {
-        const img = await loadImage(item.path);
-        const tensor = await processImage(img);
-        imageTensors.push(tensor);
-        const labelVector = new Array(categories.length).fill(0);
         labelVector[item.label] = 1; // One-hot encoding labels
         if (item.label == 0) {
             labelVector[0] = 1;
