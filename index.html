@@ -34,11 +34,13 @@ async function processImage(img) {
 }
 // Convert image to TensorFlow.js tensor
 async function processImage2(img) {
-    return tf.browser.fromPixels(img)
+    const tensor = tf.browser.fromPixels(img)
         .resizeNearestNeighbor([128, 128]) // Resize to match model input size
         .toFloat()
         .div(tf.scalar(255)) // Normalize pixel values
-        .expandDims()
+        .expandDims(); // Add batch dimension
+
+    return tensor;
 }
 // Define the CNN Model
 const model = tf.sequential();
@@ -165,18 +167,17 @@ async function classifyExtractedImages(pdfUrl) {
         console.log("Shape of tensor:", tensor.shape);
 
         if (tensor) {
-            console.log("Shape of tensor:", tensor.shape);
-            //const prediction = model.predict(tensor);
-            //const predictionData = await prediction.data();
-            //const threshold = 0.5;
+            const prediction = model.predict(tensor);
+            const predictionData = await prediction.data();
+            const threshold = 0.5;
 
-            //const predictedCategories = predictionData
-            //    .map((val, idx) => (val > threshold ? idx : -1))
-            //    .filter(idx => idx !== -1);
+            const predictedCategories = predictionData
+                .map((val, idx) => (val > threshold ? idx : -1))
+                .filter(idx => idx !== -1);
 
-            //    predictedCategories.forEach(categoryIndex => {
-            //        testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
-            //    });
+            predictedCategories.forEach(categoryIndex => {
+                testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
+            });
         }
     }
 }
