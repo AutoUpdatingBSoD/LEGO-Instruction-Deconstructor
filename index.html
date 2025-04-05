@@ -164,17 +164,18 @@ async function classifyExtractedImages(pdfUrl) {
 
         img.onload = async () => {
             const tensor = processImage2(img);
-           const prediction = model.predict(tensor);
-            const predictionData = await prediction.data();
-            const threshold = 0.5;
+            console.log("Shape of tensor:", tensor.shape);
+            //const prediction = model.predict(tensor);
+            //const predictionData = await prediction.data();
+            //const threshold = 0.5;
 
-            const predictedCategories = predictionData
-                .map((val, idx) => (val > threshold ? idx : -1))
-                .filter(idx => idx !== -1);
+            //const predictedCategories = predictionData
+            //    .map((val, idx) => (val > threshold ? idx : -1))
+            //    .filter(idx => idx !== -1);
 
-                predictedCategories.forEach(categoryIndex => {
-                testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
-});
+            //    predictedCategories.forEach(categoryIndex => {
+            //        testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
+                });
         };
     }
 }
