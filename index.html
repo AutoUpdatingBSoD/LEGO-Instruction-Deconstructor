@@ -143,10 +143,6 @@ async function loadDataset() {
         xs: tf.stack(imageTensors),
         ys: tf.tensor2d(labels)
     };
-    return {
-        xs: tf.stack(imageTensors),
-        ys: tf.tensor2d(labels) // [num_samples, 10]
-    };
 }
 
 // Train the model
