@@ -48,14 +48,14 @@ model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
 model.add(tf.layers.flatten());
 model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-model.add(tf.layers.dense({ units: 10, activation: 'softmax' })); // 10 categories (adjust as needed)
+model.add(tf.layers.dense({ units: 10, activation: 'sigmoid' })); // 10 categories (adjust as needed)
 
-model.compile({ optimizer: tf.train.adam(), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
 async function loadDataset() {
     const dataset = [];
     const categories = [
-        'bagset', 'dontreadrepeat', 'finished', 'index', 'pageno', 
+        'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 
         'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
     const indices = [
@@ -93,7 +93,38 @@ async function loadDataset() {
         const img = await loadImage(item.path);
         const tensor = await processImage(img);
         imageTensors.push(tensor);
-        labels.push(item.label);
+        const labelVector = new Array(categories.length).fill(0);
+        if (item.label == 0){
+            labelVector[item.label] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0];            
+        }
+        if (item.label == 1){
+            labelVector[item.label] = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0];            
+        }
+        if (item.label == 2){
+            labelVector[item.label] = [0, 0, 1, 0, 1, 0, 0, 0, 0, 0];            
+        }
+        if (item.label == 3){
+            labelVector[item.label] = [0, 0, 0, 1, 1, 1, 0, 1, 0, 0];            
+        }
+        if (item.label == 4){
+            labelVector[item.label] = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0];            
+        }
+        if (item.label == 5){
+            labelVector[item.label] = [0, 0, 0, 0, 0, 1, 0, 1, 0, 0];            
+        }
+        if (item.label == 6){
+            labelVector[item.label] = [0, 0, 0, 0, 0, 0, 1, 1, 0, 0];            
+        }
+        if (item.label == 7){
+            labelVector[item.label] = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0];            
+        }
+        if (item.label == 8){
+            labelVector[item.label] = [0, 0, 0, 0, 1, 0, 0, 0, 1, 0];            
+        }
+        if (item.label == 9){
+            labelVector[item.label] = [0, 1, 0, 0, 0, 0, 0, 0, 0, 1];            
+        }
+        labels.push(labelVector);
             testlog.innerHTML = testlog.innerHTML + "<br><br>labeled " + item.label;
     }
 
@@ -124,12 +155,17 @@ async function classifyExtractedImages(pdfUrl) {
         img.src = imgSrc;
 
         img.onload = async () => {
-            const tensor = await processImage2(img);
-            const prediction = model.predict(tensor);
-            const classIndex = prediction.argMax(1).dataSync()[0];
+           const prediction = model.predict(tensor);
+            const predictionData = await prediction.data();
+            const threshold = 0.5;
 
-                testlog.innerHTML = testlog.innerHTML + "<br><br>Detected category " + classIndex + " ";
-            j++;
+            const predictedCategories = predictionData
+                .map((val, idx) => (val > threshold ? idx : -1))
+                .filter(idx => idx !== -1);
+
+                predictedCategories.forEach(categoryIndex => {
+                testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
+});
         };
     }
 }
