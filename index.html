@@ -27,10 +27,18 @@ async function processImage(img) {
             .resizeNearestNeighbor([128, 128])
             .toFloat()
             .div(255)
+    });
+}
+async function processImage2(img) {
+    return tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+            .resizeNearestNeighbor([128, 128])
+            .toFloat()
+            .div(255)
             .expandDims();
     });
 }
-
+    
 const model = tf.sequential();
 model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
@@ -113,7 +121,7 @@ async function classifyExtractedImages(pdfUrl) {
         img.src = imgSrc;
 
         img.onload = async () => {
-            const tensor = await processImage(img);
+            const tensor = await processImage2(img);
             const prediction = model.predict(tensor);
             const predictionData = await prediction.data();
             const threshold = 0.5;
