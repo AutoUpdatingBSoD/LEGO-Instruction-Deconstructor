@@ -11,7 +11,12 @@ const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
 const baseDir = 'model/dataset/';
 
 // Setup backend
-await tf.setBackend('webgl');
+async function setupBackend() {
+    const backend = await tf.backend() === 'webgpu' ? 'webgpu' : 'webgl'; 
+    await tf.setBackend(backend);
+    console.log(`Using backend: ${tf.getBackend()}`);
+}
+setupBackend();
 console.log("Backend:", tf.getBackend());
 
 // Model
