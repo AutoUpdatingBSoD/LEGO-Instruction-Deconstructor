@@ -4,7 +4,8 @@
 <input type="file" id="imageUpload" multiple>
 <div id="testlog"></div>
 <script>
-var testlog = document.getElementById("testlog");
+const testlog = document.getElementById("testlog");
+const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
 
 async function setupBackend() {
     await tf.setBackend('webgl');
@@ -38,7 +39,7 @@ async function processImage2(img) {
             .div(255)
             .expandDims();
     });
-}    
+}
     
 const model = tf.sequential();
 model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
@@ -47,18 +48,17 @@ model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
 model.add(tf.layers.flatten());
 model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-model.add(tf.layers.dense({ units: 10, activation: 'sigmoid' }));
+model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
 async function loadDataset() {
     const dataset = [];
-    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
     const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
     const baseDir = 'model/dataset/';
 
     for (let j = 0; j < categories.length; j++) {
-        let category = categories[j];
-        let jth = indices[j];
+        const category = categories[j];
+        const jth = indices[j];
         for (let i = 1; i <= jth; i++) {
             const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
             try {
@@ -121,15 +121,19 @@ async function classifySingleImage(imgSrc, pageIndex) {
             const predictionData = await prediction.data();
             const threshold = 0.5;
 
-            const predictedCategories = predictionData
-                .map((val, idx) => (val > threshold ? idx : -1))
-                .filter(idx => idx !== -1);
+            const detected = [];
+            predictionData.forEach((val, idx) => {
+                if (val > threshold) {
+                    detected.push({ category: categories[idx], confidence: val.toFixed(2) });
+                }
+            });
 
-            if (predictedCategories.length === 0) {
+            if (detected.length === 0) {
                 testlog.innerHTML += `<br>Page ${pageIndex + 1}: No relevant categories detected.`;
             } else {
-                predictedCategories.forEach(categoryIndex => {
-                    testlog.innerHTML += `<br>Page ${pageIndex + 1}: Detected category ${categoryIndex}`;
+                testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
+                detected.forEach(d => {
+                    testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
                 });
             }
             resolve();
