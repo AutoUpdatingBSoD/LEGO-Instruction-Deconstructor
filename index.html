@@ -67,7 +67,7 @@ async function loadDataset() {
 
     for (const item of dataset) {
         const img = await loadImage(item.path);
-        const tensor = await processImage(img);
+        const tensor = await processImage(img, false);
         imageTensors.push(tensor);
 
         const labelVector = new Array(categories.length).fill(0);
