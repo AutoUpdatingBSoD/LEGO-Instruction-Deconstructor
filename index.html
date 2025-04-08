@@ -110,7 +110,7 @@ async function classifySingleImage(imgSrc, pageIndex) {
             const tensor = await processImage(img);
             const prediction = model.predict(tensor);
             const predictionData = await prediction.data();
-            const threshold = 0.5;
+            const threshold = 0.25; // or even 0.2
 
             const detected = [];
             predictionData.forEach((val, idx) => {
