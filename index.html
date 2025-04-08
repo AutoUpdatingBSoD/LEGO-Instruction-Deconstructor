@@ -39,105 +39,139 @@ async function loadImage(url) {
     });
 }
 
-function processImage(img) {
+async function processImage(img) {
     return tf.tidy(() => {
         return tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([96, 96])
+            .resizeNearestNeighbor([128, 128])
             .toFloat()
             .div(255)
             .expandDims();
     });
 }
 
-function getLabelVector(index) {
-    const vec = new Array(categories.length).fill(0);
-    switch (index) {
-        case 0: vec[0] = 1; break;
-        case 1: vec[1] = 1; break;
-        case 2: vec[2] = 1; vec[4] = 1; break;
-        case 3: vec[3] = 1; vec[4] = 1; vec[5] = 1; vec[7] = 1; break;
-        case 4: vec[4] = 1; break;
-        case 5: vec[5] = 1; vec[7] = 1; break;
-        case 6: vec[6] = 1; vec[7] = 1; break;
-        case 7: vec[7] = 1; break;
-        case 8: vec[4] = 1; vec[8] = 1; break;
-        case 9: vec[2] = 1; vec[9] = 1; break;
-    }
-    return tf.tensor2d([vec]);
-}
+const model = tf.sequential();
+model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.flatten());
+model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+model.add(tf.layers.dense({ units: 10, activation: 'sigmoid' }));
+model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
-async function* dataGenerator() {
+async function loadDataset() {
+    const dataset = [];
+    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+    const baseDir = 'model/dataset/';
+
     for (let j = 0; j < categories.length; j++) {
-        for (let i = 1; i <= indices[j]; i++) {
-            const url = `${baseDir}${categories[j]}/${categories[j]} ${i}.png`;
+        let category = categories[j];
+        let jth = indices[j];
+        for (let i = 1; i <= jth; i++) {
+            const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
             try {
-                const response = await fetch(url, { method: 'HEAD' });
+                const response = await fetch(imageUrl, { method: 'HEAD' });
                 if (!response.ok) break;
-                const img = await loadImage(url);
-                const xs = processImage(img);
-                const ys = getLabelVector(j);
-                yield { xs, ys };
-            } catch (e) {
-                console.warn("Skipped:", url);
+                dataset.push({ path: imageUrl, label: j });
+            } catch (error) {
                 break;
             }
         }
     }
+
+    const imageTensors = [];
+    const labels = [];
+
+    for (const item of dataset) {
+        const img = await loadImage(item.path);
+        const tensor = await processImage(img);
+        imageTensors.push(tensor);
+
+        const labelVector = new Array(categories.length).fill(0);
+        const category = item.label;
+
+        switch (category) {
+            case 0: labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; break;
+            case 2: labelVector[2] = 1; labelVector[4] = 1; break;
+            case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+            case 4: labelVector[4] = 1; break;
+            case 5: labelVector[5] = 1; labelVector[7] = 1; break;
+            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+            case 7: labelVector[7] = 1; break;
+            case 8: labelVector[4] = 1; labelVector[8] = 1; break;
+            case 9: labelVector[2] = 1; labelVector[9] = 1; break;
+        }
+        labels.push(labelVector);
+    }
+
+    return {
+        xs: tf.stack(imageTensors),
+        ys: tf.tensor2d(labels)
+    };
 }
 
 async function trainModel() {
-    let i = 0;
-    for await (const { xs, ys } of dataGenerator()) {
-        await model.fit(xs, ys, {
-            batchSize: 1,
-            epochs: 1
-        });
-        xs.dispose();
-        ys.dispose();
-        if (++i % 10 === 0) console.log(`Trained ${i} samples`);
-    }
-    console.log("Training complete");
+    const { xs, ys } = await loadDataset();
+    await model.fit(xs, ys, {
+        epochs: 20,
+        batchSize: 16,
+        validationSplit: 0.2,
+        callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+    });
+    testlog.innerHTML += "<br><br>Training Complete";
 }
 
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
-    for (const src of images) {
-        const img = await loadImage(src);
-        const input = processImage(img);
-        const prediction = model.predict(input);
-        const data = await prediction.data();
-        input.dispose();
-        prediction.dispose();
 
-        data.forEach((val, i) => {
-            if (val > 0.5) {
-                testlog.innerHTML += `<br>Detected: ${categories[i]} (${val.toFixed(2)})`;
-            }
-        });
+    for (const imgSrc of images) {
+        const img = new Image();
+        img.src = imgSrc;
+
+        img.onload = async () => {
+            const tensor = await processImage(img);
+            const prediction = model.predict(tensor);
+            const predictionData = await prediction.data();
+            const threshold = 0.5;
+
+            const predictedCategories = predictionData
+                .map((val, idx) => (val > threshold ? idx : -1))
+                .filter(idx => idx !== -1);
+
+            predictedCategories.forEach(categoryIndex => {
+                testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
+            });
+        };
     }
 }
 
 async function extractImagesFromPDF(pdfUrl) {
     const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-    const images = [];
+    const extractedImages = [];
+
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 1.0 });
+        const viewport = page.getViewport({ scale: 2.0 });
         const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        const ctx = canvas.getContext("2d");
         await page.render({ canvasContext: ctx, viewport }).promise;
-        images.push(canvas.toDataURL("image/jpeg"));
+        extractedImages.push(canvas.toDataURL("image/jpeg"));
     }
-    return images;
+    return extractedImages;
 }
 
 $(document).ready(() => {
-    $("#imageUpload").on("change", async function(event) {
+    $("#imageUpload").on("click", function () {
+        $("#imageUpload").val(null);
+    });
+    $("#imageUpload").on("change", function (event) {
         const file = event.target.files[0];
         const url = URL.createObjectURL(file);
-        await classifyExtractedImages(url);
+        classifyExtractedImages(url);
     });
     trainModel();
 });
