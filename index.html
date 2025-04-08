@@ -26,9 +26,10 @@ async function processImage(img) {
         return tf.browser.fromPixels(img)
             .resizeNearestNeighbor([128, 128])
             .toFloat()
-            .div(255)
+            .div(255);
     });
 }
+
 async function processImage2(img) {
     return tf.tidy(() => {
         return tf.browser.fromPixels(img)
@@ -37,7 +38,7 @@ async function processImage2(img) {
             .div(255)
             .expandDims();
     });
-}
+}    
     
 const model = tf.sequential();
 model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
@@ -79,20 +80,7 @@ async function loadDataset() {
         imageTensors.push(tensor);
 
         const labelVector = new Array(categories.length).fill(0);
-        const category = item.label;
-
-        switch (category) {
-            case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; break;
-            case 2: labelVector[2] = 1; labelVector[4] = 1; break;
-            case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
-            case 4: labelVector[4] = 1; break;
-            case 5: labelVector[5] = 1; labelVector[7] = 1; break;
-            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
-            case 7: labelVector[7] = 1; break;
-            case 8: labelVector[4] = 1; labelVector[8] = 1; break;
-            case 9: labelVector[2] = 1; labelVector[9] = 1; break;
-        }
+        labelVector[item.label] = 1;
         labels.push(labelVector);
     }
 
@@ -116,7 +104,14 @@ async function trainModel() {
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
 
-    for (const imgSrc of images) {
+    for (let i = 0; i < images.length; i++) {
+        const imgSrc = images[i];
+        await classifySingleImage(imgSrc, i);
+    }
+}
+
+async function classifySingleImage(imgSrc, pageIndex) {
+    return new Promise((resolve) => {
         const img = new Image();
         img.src = imgSrc;
 
@@ -130,11 +125,16 @@ async function classifyExtractedImages(pdfUrl) {
                 .map((val, idx) => (val > threshold ? idx : -1))
                 .filter(idx => idx !== -1);
 
-            predictedCategories.forEach(categoryIndex => {
-                testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
-            });
+            if (predictedCategories.length === 0) {
+                testlog.innerHTML += `<br>Page ${pageIndex + 1}: No relevant categories detected.`;
+            } else {
+                predictedCategories.forEach(categoryIndex => {
+                    testlog.innerHTML += `<br>Page ${pageIndex + 1}: Detected category ${categoryIndex}`;
+                });
+            }
+            resolve();
         };
-    }
+    });
 }
 
 async function extractImagesFromPDF(pdfUrl) {
