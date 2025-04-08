@@ -4,231 +4,136 @@
 <input type="file" id="imageUpload" multiple>
 <div id="testlog"></div>
 <script>
-var testlog = document.getElementById("testlog");
-// Ensure WebGPU Backend for TensorFlow.js
-async function setupBackend() {
-    const backend = await tf.backend() === 'webgpu' ? 'webgpu' : 'webgl'; 
-    await tf.setBackend(backend);
-    console.log(`Using backend: ${tf.getBackend()}`);
-}
+const testlog = document.getElementById("testlog");
 
-setupBackend();
+const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+const baseDir = 'model/dataset/';
 
-// Load image and convert to tensor
+// Setup backend
+await tf.setBackend('webgl');
+console.log("Backend:", tf.getBackend());
+
+// Model
+const model = tf.sequential();
+model.add(tf.layers.conv2d({ inputShape: [96, 96, 3], filters: 16, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.flatten());
+model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
+model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
+
 async function loadImage(url) {
-
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
         const img = new Image();
-        img.crossOrigin = "anonymous"; // To prevent CORS issues
+        img.crossOrigin = "anonymous";
         img.src = url;
         img.onload = () => resolve(img);
     });
-    testlog.innerHTML = testlog.innerHTML + "<br><br>done with loadImage)";
 }
 
-// Convert image to TensorFlow.js tensor
-async function processImage(img) {
-    return tf.browser.fromPixels(img)
-        .resizeNearestNeighbor([128, 128]) // Resize to match model input size
-        .toFloat()
-        .div(tf.scalar(255)) // Normalize pixel values
-}
-// Convert image to TensorFlow.js tensor
-async function processImage2(img) {
-    const tensor = tf.browser.fromPixels(img)
-        .resizeNearestNeighbor([128, 128]) // Resize to match model input size
-        .toFloat()
-        .div(tf.scalar(255)) // Normalize pixel values
-        .expandDims(); // Add batch dimension
-
-    return tensor;
-}
-// Define the CNN Model
-const model = tf.sequential();
-model.add(tf.layers.conv2d({ inputShape: [128, 128, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
-model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
-model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
-model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
-model.add(tf.layers.flatten());
-model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-model.add(tf.layers.dense({ units: 10, activation: 'sigmoid' })); // 10 categories (adjust as needed)
-
-model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
-
-async function loadDataset() {
-    const dataset = [];
-    const categories = [
-        'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 
-        'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-    ];
-    const indices = [
-        5, 2, 2, 4, 4, 
-        26, 18, 4, 2, 6
-    ];
-    const baseDir = 'model/dataset/'; // Path relative to your GitHub-hosted environment
-
-    for (var j = 0; j < categories.length; j++) {
-        category = categories[j];
-        jth = indices[j];
-        for (var i = 1; i <= jth; i++){
-            const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
-
-            try {
-                const response = await fetch(imageUrl, { method: 'HEAD' });
-                if (!response.ok) break; // Stop fetching when file doesn't exist
-
-                dataset.push({
-                    path: imageUrl,
-                    label: categories.indexOf(category)
-                });
-            } catch (error) {
-                testlog.innerHTML = testlog.innerHTML + "<br><br>error " + category + " " + i;
-                break; // Stop when no more files are found
-            }
-           //testlog.innerHTML = testlog.innerHTML + "<br><br>pushed " + category + " " + i;
-        }
-    }
-
-    const imageTensors = [];
-    const labels = [];
-
-    for (const item of dataset) {
-        const img = await loadImage(item.path);
-        const tensor = await processImage(img);
-        imageTensors.push(tensor);
-        const labelVector = new Array(categories.length).fill(0);
-        labelVector[item.label] = 1; // One-hot encoding labels
-        if (item.label == 0) {
-            labelVector[0] = 1;
-        }
-        if (item.label == 1) {
-            labelVector[1] = 1;
-        }
-        if (item.label == 2) {
-            labelVector[2] = 1;
-            labelVector[4] = 1;
-        }
-        if (item.label == 3) {
-            labelVector[3] = 1;
-            labelVector[4] = 1;
-            labelVector[5] = 1;
-            labelVector[7] = 1;
-        }
-        if (item.label == 4) {
-            labelVector[4] = 1;
-        }
-        if (item.label == 5) {
-            labelVector[5] = 1;
-            labelVector[7] = 1;
-        }
-        if (item.label == 6) {
-            labelVector[6] = 1;
-            labelVector[7] = 1;
-        }
-        if (item.label == 7) {
-            labelVector[7] = 1;
-        }
-        if (item.label == 8) {
-            labelVector[4] = 1;
-            labelVector[8] = 1;
-        }
-        if (item.label == 9){
-            labelVector[2] = 1;
-            labelVector[9] = 1;
-        }           
-        labels.push(labelVector);
-    }
-
-    return {
-        xs: tf.stack(imageTensors),
-        ys: tf.tensor2d(labels)
-    };
-}
-
-// Train the model
-async function trainModel() {
-    const { xs, ys } = await loadDataset();
-    testlog.innerHTML = testlog.innerHTML + "<br><br>started training";
-    await model.fit(xs, ys, {
-        epochs: 20,
-        batchSize: 16,
-        validationSplit: 0.2,
-        callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+function processImage(img) {
+    return tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+            .resizeNearestNeighbor([96, 96])
+            .toFloat()
+            .div(255)
+            .expandDims();
     });
-
-        testlog.innerHTML = testlog.innerHTML + "<br><br> Training Complete";
 }
+
+function getLabelVector(index) {
+    const vec = new Array(categories.length).fill(0);
+    switch (index) {
+        case 0: vec[0] = 1; break;
+        case 1: vec[1] = 1; break;
+        case 2: vec[2] = 1; vec[4] = 1; break;
+        case 3: vec[3] = 1; vec[4] = 1; vec[5] = 1; vec[7] = 1; break;
+        case 4: vec[4] = 1; break;
+        case 5: vec[5] = 1; vec[7] = 1; break;
+        case 6: vec[6] = 1; vec[7] = 1; break;
+        case 7: vec[7] = 1; break;
+        case 8: vec[4] = 1; vec[8] = 1; break;
+        case 9: vec[2] = 1; vec[9] = 1; break;
+    }
+    return tf.tensor2d([vec]);
+}
+
+async function* dataGenerator() {
+    for (let j = 0; j < categories.length; j++) {
+        for (let i = 1; i <= indices[j]; i++) {
+            const url = `${baseDir}${categories[j]}/${categories[j]} ${i}.png`;
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+                if (!response.ok) break;
+                const img = await loadImage(url);
+                const xs = processImage(img);
+                const ys = getLabelVector(j);
+                yield { xs, ys };
+            } catch (e) {
+                console.warn("Skipped:", url);
+                break;
+            }
+        }
+    }
+}
+
+async function trainModel() {
+    let i = 0;
+    for await (const { xs, ys } of dataGenerator()) {
+        await model.fit(xs, ys, {
+            batchSize: 1,
+            epochs: 1
+        });
+        xs.dispose();
+        ys.dispose();
+        if (++i % 10 === 0) console.log(`Trained ${i} samples`);
+    }
+    console.log("Training complete");
+}
+
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
-    for (const imgSrc of images) {
-        const img = new Image();
-        img.src = imgSrc;
+    for (const src of images) {
+        const img = await loadImage(src);
+        const input = processImage(img);
+        const prediction = model.predict(input);
+        const data = await prediction.data();
+        input.dispose();
+        prediction.dispose();
 
-        img.onload = async () => {
-            const tensor = await processImage2(img); // Make sure to await
-            if (tensor) {
-                console.log("Tensor shape:", tensor.shape);
-                // Make prediction
-                const prediction = model.predict(tensor);
-                const predictionData = await prediction.data();
-                const threshold = 0.5;
-
-                const predictedCategories = predictionData
-                    .map((val, idx) => (val > threshold ? idx : -1))
-                    .filter(idx => idx !== -1);
-
-                predictedCategories.forEach(categoryIndex => {
-                    testlog.innerHTML += `<br>Detected category: ${categoryIndex}`;
-                });
-            } else {
-                console.error("Failed to process image.");
+        data.forEach((val, i) => {
+            if (val > 0.5) {
+                testlog.innerHTML += `<br>Detected: ${categories[i]} (${val.toFixed(2)})`;
             }
-        };
+        });
     }
 }
+
 async function extractImagesFromPDF(pdfUrl) {
-    testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading pages ";
     const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-    const numPages = pdf.numPages;
-    const extractedImages = [];
-
-    for (let i = 1; i <= numPages; i++) {
-        //testlog.innerHTML = testlog.innerHTML + "<br><br>Started reading page " + i;
+    const images = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 });
-
-        // Render the page onto a canvas
+        const viewport = page.getViewport({ scale: 1.0 });
         const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-
+        const ctx = canvas.getContext("2d");
         await page.render({ canvasContext: ctx, viewport }).promise;
-
-        // Convert canvas to an image and store it
-        const imgSrc = canvas.toDataURL("image/jpeg");
-        extractedImages.push(imgSrc);
-        //testlog.innerHTML = testlog.innerHTML + "<br><br>Read page " + i;
-      
+        images.push(canvas.toDataURL("image/jpeg"));
     }
-
-    return extractedImages;
+    return images;
 }
 
-// jQuery UI for uploading & predicting images
 $(document).ready(() => {
-    $("#imageUpload").on("click", async function(event) {
-          $("#imageUpload").val() = null;
-    });
     $("#imageUpload").on("change", async function(event) {
         const file = event.target.files[0];
-        if (file) {
-            const url = URL.createObjectURL(file);
-            console.log("Uploaded image:", url);
-            await classifyExtractedImages(url);
-        }
+        const url = URL.createObjectURL(file);
+        await classifyExtractedImages(url);
     });
-    // Optionally train the model if needed
     trainModel();
 });
 </script>
