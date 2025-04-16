@@ -22,29 +22,24 @@ async function loadImage(url) {
     });
 }
 
-//const supportsFloat16 = tf.backend().floatPrecision() === 16;
-
 async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
             .resizeNearestNeighbor([128, 128])
             .toFloat()
             .div(255);
-        //if (supportsFloat16) {
-            //tensor = tensor.cast('float16');
-        //}
         return expand ? tensor.expandDims() : tensor;
     });
 }
 
-// Model setup using functional API to handle dynamic shapes
+// Lighter model with global average pooling
 const input = tf.input({ shape: [128, 128, 3] });
-let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
+let x = tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu' }).apply(input);
 x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-x = tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }).apply(x);
+x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(x);
 x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-x = tf.layers.flatten().apply(x);  // Flatten dynamically based on input shape
-x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
+x = tf.layers.globalAveragePooling2d().apply(x);
+x = tf.layers.dense({ units: 64, activation: 'relu' }).apply(x);
 const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
 
 const model = tf.model({ inputs: input, outputs: output });
@@ -83,17 +78,19 @@ async function loadDataset() {
         labels.push(labelVector);
     }
 
-    return {
-        xs: tf.stack(imageTensors),
-        ys: tf.tensor2d(labels)
-    };
+    const xs = tf.stack(imageTensors);
+    const ys = tf.tensor2d(labels);
+
+    imageTensors.forEach(t => t.dispose());
+
+    return { xs, ys };
 }
 
 async function trainModel() {
     const { xs, ys } = await loadDataset();
     await model.fit(xs, ys, {
         epochs: 20,
-        batchSize: 16,
+        batchSize: 8,
         validationSplit: 0.2,
         callbacks: tf.callbacks.earlyStopping({ patience: 3 })
     });
@@ -117,30 +114,33 @@ async function classifySingleImage(imgSrc, pageIndex) {
         img.src = imgSrc;
 
         img.onload = async () => {
-            const tensor = await processImage(img, true);
-            const prediction = model.predict(tensor);
-            const predictionData = await prediction.data();
-            const threshold = 0.5;
+            tf.tidy(() => {
+                processImage(img, true).then(tensor => {
+                    const prediction = model.predict(tensor);
+                    prediction.data().then(predictionData => {
+                        const threshold = 0.5;
+                        const detected = [];
+                        predictionData.forEach((val, idx) => {
+                            if (val > threshold) {
+                                detected.push({ category: categories[idx], confidence: val.toFixed(2) });
+                            }
+                        });
 
-            const detected = [];
-            predictionData.forEach((val, idx) => {
-                if (val > threshold) {
-                    detected.push({ category: categories[idx], confidence: val.toFixed(2) });
-                }
-            });
+                        testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
+                        if (detected.length === 0) {
+                            testlog.innerHTML += ` No relevant categories detected.`;
+                        } else {
+                            detected.forEach(d => {
+                                testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
+                            });
+                        }
 
-            testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
-            if (detected.length === 0) {
-                testlog.innerHTML += ` No relevant categories detected.`;
-            } else {
-                detected.forEach(d => {
-                    testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
+                        tensor.dispose();
+                        prediction.dispose();
+                        resolve();
+                    });
                 });
-            }
-
-            tensor.dispose();
-            prediction.dispose();
-            resolve();
+            });
         };
     });
 }
