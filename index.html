@@ -22,17 +22,20 @@ async function loadImage(url) {
     });
 }
 
+const supportsFloat16 = tf.backend().floatPrecision() === 16;
+
 async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([96, 96])
+            .resizeNearestNeighbor([128, 128])
             .toFloat()
-            .div(255)
-            .cast('float16');
+            .div(255);
+        if (supportsFloat16) {
+            tensor = tensor.cast('float16');
+        }
         return expand ? tensor.expandDims() : tensor;
     });
 }
-
 const model = tf.sequential();
 model.add(tf.layers.conv2d({ inputShape: [96, 96, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
 model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
