@@ -22,12 +22,17 @@ async function loadImage(url) {
     });
 }
 
+const supportsFloat16 = tf.backend().floatPrecision() === 16;
+
 async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([128, 128])  // Ensure this matches model's input shape
+            .resizeNearestNeighbor([128, 128])
             .toFloat()
             .div(255);
+        if (supportsFloat16) {
+            tensor = tensor.cast('float16');
+        }
         return expand ? tensor.expandDims() : tensor;
     });
 }
