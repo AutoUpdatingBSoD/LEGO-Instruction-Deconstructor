@@ -18,7 +18,7 @@
     let model;  // Model is expected to be preloaded from another source (e.g., from localStorage or URL)
 
     async function loadModel() {
-        model = await tf.loadLayersModel('path_to_your_model/model.json'); // Load your pre-trained model here
+        const model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
         testlog.innerHTML += "Model loaded successfully!<br>";
     }
 
