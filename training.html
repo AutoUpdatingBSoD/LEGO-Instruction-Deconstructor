@@ -15,7 +15,7 @@
     const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
 
     async function setupBackend() {
-        if (await tf.ENV.getAsync('WEBGL_VERSION') === 1) {
+        if (await tf.ENV.getAsync('WEBGL_VERSION') >== 1) {
             // Check if WebGL is available
             await tf.setBackend('webgl');  // Set WebGL backend (GPU acceleration)
             testlog.innerHTML += "Using WebGL backend for training.<br>";
