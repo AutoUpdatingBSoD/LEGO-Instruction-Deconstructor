@@ -1,15 +1,22 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm"></script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
 <input type="file" id="imageUpload" multiple>
 <div id="testlog"></div>
+
 <script>
 const testlog = document.getElementById("testlog");
 const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
 
+// Wait for WASM to load and use it
 async function setupBackend() {
-    await tf.setBackend('webgl');
+    testlog.innerHTML += "<br>Loading WebAssembly backend, please wait...";
+    await tf.setBackend('wasm');
+    await tf.ready();
     console.log(`Using backend: ${tf.getBackend()}`);
+    testlog.innerHTML += "<br>WASM backend ready!";
 }
 setupBackend();
 
@@ -25,23 +32,22 @@ async function loadImage(url) {
 async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([128, 128])
+            .resizeNearestNeighbor([128, 128])  // You can try 64x64 later
             .toFloat()
             .div(255);
         return expand ? tensor.expandDims() : tensor;
     });
 }
 
-// Lighter model with global average pooling
+// Functional model setup
 const input = tf.input({ shape: [128, 128, 3] });
-let x = tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu' }).apply(input);
+let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
 x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(x);
+x = tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }).apply(x);
 x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-x = tf.layers.globalAveragePooling2d().apply(x);
-x = tf.layers.dense({ units: 64, activation: 'relu' }).apply(x);
+x = tf.layers.flatten().apply(x);
+x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
 const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
-
 const model = tf.model({ inputs: input, outputs: output });
 model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
@@ -78,19 +84,17 @@ async function loadDataset() {
         labels.push(labelVector);
     }
 
-    const xs = tf.stack(imageTensors);
-    const ys = tf.tensor2d(labels);
-
-    imageTensors.forEach(t => t.dispose());
-
-    return { xs, ys };
+    return {
+        xs: tf.stack(imageTensors),
+        ys: tf.tensor2d(labels)
+    };
 }
 
 async function trainModel() {
     const { xs, ys } = await loadDataset();
     await model.fit(xs, ys, {
         epochs: 20,
-        batchSize: 8,
+        batchSize: 16,
         validationSplit: 0.2,
         callbacks: tf.callbacks.earlyStopping({ patience: 3 })
     });
@@ -101,7 +105,6 @@ async function trainModel() {
 
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
-
     for (let i = 0; i < images.length; i++) {
         await classifySingleImage(images[i], i);
         await tf.nextFrame();
@@ -112,35 +115,31 @@ async function classifySingleImage(imgSrc, pageIndex) {
     return new Promise((resolve) => {
         const img = new Image();
         img.src = imgSrc;
-
         img.onload = async () => {
-            tf.tidy(() => {
-                processImage(img, true).then(tensor => {
-                    const prediction = model.predict(tensor);
-                    prediction.data().then(predictionData => {
-                        const threshold = 0.5;
-                        const detected = [];
-                        predictionData.forEach((val, idx) => {
-                            if (val > threshold) {
-                                detected.push({ category: categories[idx], confidence: val.toFixed(2) });
-                            }
-                        });
+            const tensor = await processImage(img, true);
+            const prediction = model.predict(tensor);
+            const predictionData = await prediction.data();
+            const threshold = 0.5;
 
-                        testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
-                        if (detected.length === 0) {
-                            testlog.innerHTML += ` No relevant categories detected.`;
-                        } else {
-                            detected.forEach(d => {
-                                testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
-                            });
-                        }
-
-                        tensor.dispose();
-                        prediction.dispose();
-                        resolve();
-                    });
-                });
+            const detected = [];
+            predictionData.forEach((val, idx) => {
+                if (val > threshold) {
+                    detected.push({ category: categories[idx], confidence: val.toFixed(2) });
+                }
             });
+
+            testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
+            if (detected.length === 0) {
+                testlog.innerHTML += ` No relevant categories detected.`;
+            } else {
+                detected.forEach(d => {
+                    testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
+                });
+            }
+
+            tensor.dispose();
+            prediction.dispose();
+            resolve();
         };
     });
 }
@@ -171,6 +170,11 @@ $(document).ready(() => {
         const url = URL.createObjectURL(file);
         classifyExtractedImages(url);
     });
-    trainModel();
+
+    // Wait for backend before training
+    (async () => {
+        await setupBackend();
+        await trainModel();
+    })();
 });
 </script>
