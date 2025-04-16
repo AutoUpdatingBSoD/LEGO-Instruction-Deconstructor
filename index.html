@@ -56,7 +56,7 @@ function datasetGenerator() {
                     const response = await fetch(imageUrl, { method: 'HEAD' });
                     if (!response.ok) break;
                     const img = await loadImage(imageUrl);
-                    const tensor = await processImage(img, true);
+                    const tensor = await processImage(img, false);
                     const label = new Array(categories.length).fill(0);
                     label[j] = 1;
                     yield { xs: tensor, ys: tf.tensor1d(label) };
