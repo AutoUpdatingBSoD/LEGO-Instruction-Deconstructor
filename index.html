@@ -35,7 +35,7 @@
 
     async function loadModel() {
       try {
-        model = await tf.loadLayersModel('model/modeltest/lego-classifier.json');
+        model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
         console.log("✅ Model loaded.");
       } catch (e) {
         console.error("❌ Failed to load model:", e);
