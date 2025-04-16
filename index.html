@@ -1,108 +1,70 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Testing - TensorFlow.js</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <input type="file" id="imageUpload" multiple>
-    <div id="testlog"></div>
+  <meta charset="UTF-8">
+  <title>LEGO Classifier - Testing</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2em;
+      background: #f5f5f5;
+    }
+    input[type="file"] {
+      margin-bottom: 1em;
+    }
+    #preview {
+      max-width: 256px;
+      margin-bottom: 1em;
+      border: 1px solid #ccc;
+    }
+  </style>
 </head>
 <body>
-<script>
-    const testlog = document.getElementById("testlog");
-    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
-    
-    let model;  // Model is expected to be preloaded from another source (e.g., from localStorage or URL)
+  <h1>LEGO Classifier - Testing</h1>
+  <input type="file" id="imageInput" accept="image/*"><br>
+  <img id="preview" src="" alt="Image preview"><br>
+  <div id="result">Prediction: N/A</div>
+
+  <script>
+    let model;
+    const categories = [
+      'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
+      'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+    ];
 
     async function loadModel() {
-        const model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
-        testlog.innerHTML += "Model loaded successfully!<br>";
+      try {
+        model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
+        console.log("✅ Model loaded.");
+      } catch (e) {
+        console.error("❌ Failed to load model:", e);
+      }
     }
 
-    async function processImage(img) {
-        return tf.tidy(() => {
-            let tensor = tf.browser.fromPixels(img)
-                .resizeNearestNeighbor([128, 128])  // Resize image for model
-                .toFloat()
-                .div(255);  // Normalize image
-            return tensor.expandDims(0);  // Add batch dimension for prediction
-        });
+    async function classifyImage(img) {
+      if (!model) {
+        console.error("Model not loaded.");
+        return;
+      }
+
+      const tensor = tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+          .resizeNearestNeighbor([64, 64])
+          .toFloat()
+          .div(255)
+          .expandDims();
+      });
+
+      const prediction = model.predict(tensor);
+      const data = await prediction.data();
+      const topIndex = data.indexOf(Math.max(...data));
+      const label = categories[topIndex];
+      document.getElementById('result').innerText = `Prediction: ${label}`;
+
+      tensor.dispose();
+      prediction.dispose();
     }
 
-    async function classifyExtractedImages(pdfUrl) {
-        const images = await extractImagesFromPDF(pdfUrl);
-        
-        // Process images one by one
-        for (let i = 0; i < images.length; i++) {
-            await classifySingleImage(images[i], i);
-            await tf.nextFrame();  // Allow TensorFlow.js to process the next frame
-        }
-    }
-
-    async function classifySingleImage(imgSrc, pageIndex) {
-        const img = new Image();
-        img.src = imgSrc;
-
-        img.onload = async () => {
-            // Process and predict the image
-            const tensor = await processImage(img);
-            const prediction = model.predict(tensor);
-            const predictionData = await prediction.data();
-            const threshold = 0.5;
-
-            const detected = [];
-            predictionData.forEach((val, idx) => {
-                if (val > threshold) {
-                    detected.push({ category: categories[idx], confidence: val.toFixed(2) });
-                }
-            });
-
-            // Log the result
-            testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
-            if (detected.length === 0) {
-                testlog.innerHTML += ` No relevant categories detected.`;
-            } else {
-                detected.forEach(d => {
-                    testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
-                });
-            }
-
-            // Cleanup after prediction
-            tensor.dispose();
-            prediction.dispose();
-        };
-    }
-
-    async function extractImagesFromPDF(pdfUrl) {
-        const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-        const extractedImages = [];
-
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            extractedImages.push(canvas.toDataURL("image/jpeg"));
-        }
-        return extractedImages;
-    }
-
-    $(document).ready(() => {
-        $("#imageUpload").on("change", function (event) {
-            const file = event.target.files[0];
-            const url = URL.createObjectURL(file);
-            classifyExtractedImages(url);
-        });
-        
-        // Load the model when the page loads
-        loadModel();
-    });
-</script>
-</body>
-</html>
+    function handleImageUpload(event) {
+      const file = event.target.files[
