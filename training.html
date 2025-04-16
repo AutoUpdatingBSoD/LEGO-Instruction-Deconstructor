@@ -7,6 +7,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm"></script>
+
     <div id="testlog"></div>
 </head>
 <body>
@@ -15,14 +17,20 @@
     const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
 
     async function setupBackend() {
-        if (await tf.ENV.getAsync('WEBGL_VERSION') >== 1) {
             // Check if WebGL is available
             await tf.setBackend('webgl');  // Set WebGL backend (GPU acceleration)
-            testlog.innerHTML += "Using WebGL backend for training.<br>";
-        } else {
-            // Fallback to WebAssembly if WebGL is not available
-            await tf.setBackend('wasm');
-            testlog.innerHTML += "WebGL not available, using WASM as fallback.<br>";
+
+            try {
+                await tf.setBackend('webgl');
+                await tf.ready();
+                testlog.innerHTML += "Using WebGL backend for training.<br>";
+            } catch (e) {
+
+                await tf.setBackend('wasm');
+                await tf.ready();
+                testlog.innerHTML += "WebGL not available, using WASM as fallback.<br>";
+            }
+
         }
         await tf.ready();  // Ensure TensorFlow.js is ready to use
         console.log(`Using backend: ${tf.getBackend()}`);
