@@ -1,93 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>LEGO Classifier - Testing</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      padding: 2em;
-      background: #f5f5f5;
-    }
-    input[type="file"] {
-      margin-bottom: 1em;
-    }
-    #preview {
-      max-width: 256px;
-      margin-bottom: 1em;
-      border: 1px solid #ccc;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>LEGO Classifier - Testing</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-  <h1>LEGO Classifier - Testing</h1>
-  <input type="file" id="imageInput" accept="image/*"><br>
-  <img id="preview" src="" alt="Image preview"><br>
-  <div id="result">Prediction: N/A</div>
+    <h2>LEGO Instruction Classifier - Testing</h2>
+    <input type="file" id="pdfInput">
+    <div id="results"></div>
 
-  <script>
+    <script>
+    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
     let model;
-    const categories = [
-      'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
-      'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-    ];
 
-    async function loadModel() {
-      try {
-        model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
-        console.log("✅ Model loaded.");
-      } catch (e) {
-        console.error("❌ Failed to load model:", e);
-      }
+    async function setupModel() {
+        await tf.setBackend('webgl');
+        await tf.ready();
+        model = await tf.loadLayersModel('model/lego-classifier.json');
+        console.log('Model loaded and backend initialized');
     }
 
-    async function classifyImage(img) {
-      if (!model) {
-        console.error("Model not loaded.");
-        return;
-      }
-
-      const tensor = tf.tidy(() => {
-        return tf.browser.fromPixels(img)
-          .resizeNearestNeighbor([64, 64])
-          .toFloat()
-          .div(255)
-          .expandDims();
-      });
-
-      const prediction = model.predict(tensor);
-      const data = await prediction.data();
-      const topIndex = data.indexOf(Math.max(...data));
-      const label = categories[topIndex];
-      document.getElementById('result').innerText = `Prediction: ${label}`;
-
-      tensor.dispose();
-      prediction.dispose();
+    async function processImage(img) {
+        return tf.tidy(() => {
+            return tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([64, 64])
+                .toFloat()
+                .div(255)
+                .expandDims();
+        });
     }
 
-    function handleImageUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+    async function classifyImage(img, pageIndex) {
+        const tensor = await processImage(img);
+        const prediction = model.predict(tensor);
+        const data = await prediction.data();
+        const threshold = 0.5;
+        const result = [];
 
-      const img = document.getElementById('preview');
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        img.onload = () => classifyImage(img);
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
+        data.forEach((val, i) => {
+            if (val > threshold) {
+                result.push({ category: categories[i], confidence: val.toFixed(2) });
+            }
+        });
+
+        tf.dispose([tensor, prediction]);
+
+        return { page: pageIndex, results: result };
     }
 
-    async function main() {
-      await tf.setBackend('webgl');
-      await tf.ready();
-      await loadModel();
+    async function extractImagesFromPDF(file) {
+        const fileURL = URL.createObjectURL(file);
+        const pdf = await pdfjsLib.getDocument(fileURL).promise;
+        const allResults = [];
 
-      document.getElementById('imageInput').addEventListener('change', handleImageUpload);
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            const image = new Image();
+            image.src = canvas.toDataURL("image/jpeg");
+
+            await new Promise(res => image.onload = res);
+            const result = await classifyImage(image, i);
+            allResults.push(result);
+        }
+
+        return allResults;
     }
 
-    main();
-  </script>
+    function displayResults(results) {
+        const container = document.getElementById("results");
+        container.innerHTML = "<h3>Classification Results:</h3>";
+
+        results.forEach(pageResult => {
+            const div = document.createElement("div");
+            div.innerHTML = `<strong>Page ${pageResult.page}:</strong><br>`;
+            if (pageResult.results.length === 0) {
+                div.innerHTML += "No categories detected.<br><br>";
+            } else {
+                pageResult.results.forEach(res => {
+                    div.innerHTML += `- ${res.category} (confidence: ${res.confidence})<br>`;
+                });
+                div.innerHTML += "<br>";
+            }
+            container.appendChild(div);
+        });
+    }
+
+    $(document).ready(() => {
+        setupModel();
+
+        $("#pdfInput").on("change", async (event) => {
+            const file = event.target.files[0];
+            if (!file || !model) return;
+
+            const results = await extractImagesFromPDF(file);
+            displayResults(results);
+        });
+    });
+    </script>
 </body>
 </html>
