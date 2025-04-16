@@ -1,123 +1,54 @@
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-<input type="file" id="imageUpload" multiple>
-<div id="testlog"></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Testing - TensorFlow.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <input type="file" id="imageUpload" multiple>
+    <div id="testlog"></div>
+</head>
+<body>
 <script>
-const testlog = document.getElementById("testlog");
-const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+    const testlog = document.getElementById("testlog");
+    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+    
+    let model;  // Model is expected to be preloaded from another source (e.g., from localStorage or URL)
 
-let model;
+    async function loadModel() {
+        model = await tf.loadLayersModel('path_to_your_model/model.json'); // Load your pre-trained model here
+        testlog.innerHTML += "Model loaded successfully!<br>";
+    }
 
-async function setupModel() {
-    const input = tf.input({ shape: [128, 128, 3] });
-    let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
-    x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-    x = tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }).apply(x);
-    x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-    x = tf.layers.flatten().apply(x);
-    x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
-    const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
+    async function processImage(img) {
+        return tf.tidy(() => {
+            let tensor = tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([128, 128])  // Resize image for model
+                .toFloat()
+                .div(255);  // Normalize image
+            return tensor.expandDims(0);  // Add batch dimension for prediction
+        });
+    }
 
-    model = tf.model({ inputs: input, outputs: output });
-    model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
-}
-
-async function loadImage(url) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = url;
-        img.onload = () => resolve(img);
-    });
-}
-
-async function processImage(img, expand = false) {
-    return tf.tidy(() => {
-        let tensor = tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([128, 128])
-            .toFloat()
-            .div(255);
-        return expand ? tensor.expandDims() : tensor;
-    });
-}
-
-async function loadDataset() {
-    const dataset = [];
-    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
-    const baseDir = 'model/dataset/';
-
-    for (let j = 0; j < categories.length; j++) {
-        const category = categories[j];
-        const jth = indices[j];
-        for (let i = 1; i <= jth; i++) {
-            const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
-            try {
-                const response = await fetch(imageUrl, { method: 'HEAD' });
-                if (!response.ok) break;
-                dataset.push({ path: imageUrl, label: j });
-            } catch (error) {
-                break;
-            }
+    async function classifyExtractedImages(pdfUrl) {
+        const images = await extractImagesFromPDF(pdfUrl);
+        
+        // Process images one by one
+        for (let i = 0; i < images.length; i++) {
+            await classifySingleImage(images[i], i);
+            await tf.nextFrame();  // Allow TensorFlow.js to process the next frame
         }
     }
 
-    const imageTensors = [];
-    const labels = [];
-
-    for (const item of dataset) {
-        const img = await loadImage(item.path);
-        const tensor = await processImage(img);
-        imageTensors.push(tensor);
-
-        const labelVector = new Array(categories.length).fill(0);
-        labelVector[item.label] = 1;
-        labels.push(labelVector);
-    }
-
-    return {
-        xs: tf.stack(imageTensors),
-        ys: tf.tensor2d(labels)
-    };
-}
-
-async function trainModel() {
-    await tf.setBackend('cpu');
-    await tf.ready();
-    await setupModel();
-
-    const { xs, ys } = await loadDataset();
-    await model.fit(xs, ys, {
-        epochs: 20,
-        batchSize: 16,
-        validationSplit: 0.2,
-        callbacks: tf.callbacks.earlyStopping({ patience: 3 })
-    });
-    xs.dispose();
-    ys.dispose();
-    testlog.innerHTML += "<br><br>Training Complete";
-
-    // Switch to wasm for inference
-    await tf.setBackend('wasm');
-    await tf.ready();
-}
-
-async function classifyExtractedImages(pdfUrl) {
-    const images = await extractImagesFromPDF(pdfUrl);
-
-    for (let i = 0; i < images.length; i++) {
-        await classifySingleImage(images[i], i);
-        await tf.nextFrame();
-    }
-}
-
-async function classifySingleImage(imgSrc, pageIndex) {
-    return new Promise((resolve) => {
+    async function classifySingleImage(imgSrc, pageIndex) {
         const img = new Image();
         img.src = imgSrc;
 
         img.onload = async () => {
-            const tensor = await processImage(img, true);
+            // Process and predict the image
+            const tensor = await processImage(img);
             const prediction = model.predict(tensor);
             const predictionData = await prediction.data();
             const threshold = 0.5;
@@ -129,6 +60,7 @@ async function classifySingleImage(imgSrc, pageIndex) {
                 }
             });
 
+            // Log the result
             testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
             if (detected.length === 0) {
                 testlog.innerHTML += ` No relevant categories detected.`;
@@ -138,39 +70,39 @@ async function classifySingleImage(imgSrc, pageIndex) {
                 });
             }
 
+            // Cleanup after prediction
             tensor.dispose();
             prediction.dispose();
-            resolve();
         };
-    });
-}
-
-async function extractImagesFromPDF(pdfUrl) {
-    const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-    const extractedImages = [];
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        extractedImages.push(canvas.toDataURL("image/jpeg"));
     }
-    return extractedImages;
-}
 
-$(document).ready(() => {
-    $("#imageUpload").on("click", function () {
-        $("#imageUpload").val(null);
+    async function extractImagesFromPDF(pdfUrl) {
+        const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+        const extractedImages = [];
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            extractedImages.push(canvas.toDataURL("image/jpeg"));
+        }
+        return extractedImages;
+    }
+
+    $(document).ready(() => {
+        $("#imageUpload").on("change", function (event) {
+            const file = event.target.files[0];
+            const url = URL.createObjectURL(file);
+            classifyExtractedImages(url);
+        });
+        
+        // Load the model when the page loads
+        loadModel();
     });
-    $("#imageUpload").on("change", function (event) {
-        const file = event.target.files[0];
-        const url = URL.createObjectURL(file);
-        classifyExtractedImages(url);
-    });
-    trainModel();
-});
 </script>
+</body>
+</html>
