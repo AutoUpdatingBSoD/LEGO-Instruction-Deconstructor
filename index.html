@@ -22,7 +22,7 @@ async function loadImage(url) {
     });
 }
 
-function processImage(img, expand = true) {
+async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
             .resizeNearestNeighbor([128, 128])
@@ -42,7 +42,33 @@ model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
 model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
-async function loadDataset() {
+function datasetGenerator() {
+    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+    const baseDir = 'model/dataset/';
+
+    return tf.data.generator(async function* () {
+        for (let j = 0; j < categories.length; j++) {
+            const category = categories[j];
+            const jth = indices[j];
+            for (let i = 1; i <= jth; i++) {
+                const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
+                try {
+                    const response = await fetch(imageUrl, { method: 'HEAD' });
+                    if (!response.ok) break;
+                    const img = await loadImage(imageUrl);
+                    const tensor = await processImage(img, true);
+                    const label = new Array(categories.length).fill(0);
+                    label[j] = 1;
+                    yield { xs: tensor, ys: tf.tensor1d(label) };
+                } catch (error) {
+                    break;
+                }
+            }
+        }
+    });
+}
+
+async function loadDatasetInMemory() {
     const dataset = [];
     const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
     const baseDir = 'model/dataset/';
@@ -67,7 +93,7 @@ async function loadDataset() {
 
     for (const item of dataset) {
         const img = await loadImage(item.path);
-        const tensor = await processImage(img, false);
+        const tensor = await processImage(img);  // no expand for training
         imageTensors.push(tensor);
 
         const labelVector = new Array(categories.length).fill(0);
@@ -82,22 +108,30 @@ async function loadDataset() {
 }
 
 async function trainModel() {
-    const { xs, ys } = await loadDataset();
-    await model.fit(xs, ys, {
+    const streamDataset = datasetGenerator().batch(16);
+    await model.fitDataset(streamDataset, {
         epochs: 20,
-        batchSize: 16,
-        validationSplit: 0.2,
         callbacks: tf.callbacks.earlyStopping({ patience: 3 })
     });
-    testlog.innerHTML += "<br><br>Training Complete";
+    testlog.innerHTML += "<br><br>Training Complete (Streaming)";
+
+    const { xs, ys } = await loadDatasetInMemory();
+    await model.fit(xs, ys, {
+        epochs: 10,
+        batchSize: 16,
+        validationSplit: 0.2
+    });
+    xs.dispose();
+    ys.dispose();
+    testlog.innerHTML += "<br><br>Training Complete (In-Memory)";
 }
 
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
 
     for (let i = 0; i < images.length; i++) {
-        const imgSrc = images[i];
-        await classifySingleImage(imgSrc, i);
+        await classifySingleImage(images[i], i);
+        await tf.nextFrame();
     }
 }
 
@@ -107,10 +141,10 @@ async function classifySingleImage(imgSrc, pageIndex) {
         img.src = imgSrc;
 
         img.onload = async () => {
-            const tensor = await processImage(img);
+            const tensor = await processImage(img, true);
             const prediction = model.predict(tensor);
             const predictionData = await prediction.data();
-            const threshold = 0.25; // or even 0.2
+            const threshold = 0.5;
 
             const detected = [];
             predictionData.forEach((val, idx) => {
@@ -119,14 +153,17 @@ async function classifySingleImage(imgSrc, pageIndex) {
                 }
             });
 
+            testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
             if (detected.length === 0) {
-                testlog.innerHTML += `<br>Page ${pageIndex + 1}: No relevant categories detected.`;
+                testlog.innerHTML += ` No relevant categories detected.`;
             } else {
-                testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
                 detected.forEach(d => {
                     testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
                 });
             }
+
+            tensor.dispose();
+            prediction.dispose();
             resolve();
         };
     });
