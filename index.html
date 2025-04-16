@@ -22,7 +22,7 @@ async function loadImage(url) {
     });
 }
 
-async function processImage(img, expand = false) {
+async function processImage(img, expand = true) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
             .resizeNearestNeighbor([128, 128])
@@ -93,7 +93,7 @@ async function loadDatasetInMemory() {
 
     for (const item of dataset) {
         const img = await loadImage(item.path);
-        const tensor = await processImage(img);  // no expand for training
+        const tensor = await processImage(img, false);  // no expand for training
         imageTensors.push(tensor);
 
         const labelVector = new Array(categories.length).fill(0);
