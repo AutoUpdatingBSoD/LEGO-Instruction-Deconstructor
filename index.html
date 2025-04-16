@@ -34,3 +34,131 @@ async function processImage(img, expand = false) {
 }
 
 const model = tf.sequential();
+model.add(tf.layers.conv2d({ inputShape: [96, 96, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+model.add(tf.layers.flatten());
+model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
+model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
+
+async function fetchDataset() {
+    const dataset = [];
+    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+    const baseDir = 'model/dataset/';
+
+    for (let j = 0; j < categories.length; j++) {
+        const category = categories[j];
+        const jth = indices[j];
+        for (let i = 1; i <= jth; i++) {
+            const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
+            try {
+                const response = await fetch(imageUrl, { method: 'HEAD' });
+                if (!response.ok) break;
+                dataset.push({ path: imageUrl, label: j });
+            } catch (error) {
+                break;
+            }
+        }
+    }
+    return dataset;
+}
+
+function imageLabelGenerator(dataset) {
+    let i = 0;
+    return async function* () {
+        for (const item of dataset) {
+            const img = await loadImage(item.path);
+            const tensor = await processImage(img);
+            const labelVector = new Array(categories.length).fill(0);
+            labelVector[item.label] = 1;
+            yield { xs: tensor, ys: tf.tensor1d(labelVector) };
+        }
+    };
+}
+
+async function trainModel() {
+    const rawDataset = await fetchDataset();
+    const generator = imageLabelGenerator(rawDataset);
+    const ds = tf.data.generator(generator).batch(1).prefetch(1);
+
+    await model.fitDataset(ds, {
+        epochs: 20,
+        callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+    });
+
+    testlog.innerHTML += "<br><br>Training Complete";
+}
+
+async function classifyExtractedImages(pdfUrl) {
+    const images = await extractImagesFromPDF(pdfUrl);
+    for (let i = 0; i < images.length; i++) {
+        await classifySingleImage(images[i], i);
+        await tf.nextFrame();
+    }
+}
+
+async function classifySingleImage(imgSrc, pageIndex) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = imgSrc;
+
+        img.onload = async () => {
+            const tensor = await processImage(img, true);
+            const prediction = model.predict(tensor);
+            const predictionData = await prediction.data();
+            const threshold = 0.5;
+
+            const detected = [];
+            predictionData.forEach((val, idx) => {
+                if (val > threshold) {
+                    detected.push({ category: categories[idx], confidence: val.toFixed(2) });
+                }
+            });
+
+            testlog.innerHTML += `<br>Page ${pageIndex + 1}:`;
+            if (detected.length === 0) {
+                testlog.innerHTML += ` No relevant categories detected.`;
+            } else {
+                detected.forEach(d => {
+                    testlog.innerHTML += `<br>&nbsp;&nbsp;- ${d.category} (confidence: ${d.confidence})`;
+                });
+            }
+
+            tensor.dispose();
+            prediction.dispose();
+            resolve();
+        };
+    });
+}
+
+async function extractImagesFromPDF(pdfUrl) {
+    const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+    const extractedImages = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        extractedImages.push(canvas.toDataURL("image/jpeg"));
+    }
+    return extractedImages;
+}
+
+$(document).ready(() => {
+    $("#imageUpload").on("click", function () {
+        $("#imageUpload").val(null);
+    });
+    $("#imageUpload").on("change", function (event) {
+        const file = event.target.files[0];
+        const url = URL.createObjectURL(file);
+        classifyExtractedImages(url);
+    });
+    trainModel();
+});
+</script>
