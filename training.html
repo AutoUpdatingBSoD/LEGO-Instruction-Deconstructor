@@ -30,9 +30,6 @@
                 await tf.ready();
                 testlog.innerHTML += "WebGL not available, using WASM as fallback.<br>";
             }
-
-        }
-        await tf.ready();  // Ensure TensorFlow.js is ready to use
         console.log(`Using backend: ${tf.getBackend()}`);
     }
 
