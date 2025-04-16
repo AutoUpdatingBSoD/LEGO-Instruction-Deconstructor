@@ -1,5 +1,5 @@
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.14.0/dist/tf-backend-wasm.js"></script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
@@ -9,16 +9,40 @@
 <script>
 const testlog = document.getElementById("testlog");
 const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+let model;
 
-// Wait for WASM to load and use it
-async function setupBackend() {
+async function setupBackendAndRun() {
     testlog.innerHTML += "<br>Loading WebAssembly backend, please wait...";
     await tf.setBackend('wasm');
     await tf.ready();
-    console.log(`Using backend: ${tf.getBackend()}`);
     testlog.innerHTML += "<br>WASM backend ready!";
+
+    setupModel();
+    await trainModel();
+
+    $("#imageUpload").on("click", function () {
+        $("#imageUpload").val(null);
+    });
+    $("#imageUpload").on("change", function (event) {
+        const file = event.target.files[0];
+        const url = URL.createObjectURL(file);
+        classifyExtractedImages(url);
+    });
 }
-setupBackend();
+
+function setupModel() {
+    const input = tf.input({ shape: [64, 64, 3] });
+    let x = tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu' }).apply(input);
+    x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
+    x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(x);
+    x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
+    x = tf.layers.flatten().apply(x);
+    x = tf.layers.dense({ units: 64, activation: 'relu' }).apply(x);
+    const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
+
+    model = tf.model({ inputs: input, outputs: output });
+    model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
+}
 
 async function loadImage(url) {
     return new Promise((resolve) => {
@@ -32,24 +56,12 @@ async function loadImage(url) {
 async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([128, 128])  // You can try 64x64 later
+            .resizeNearestNeighbor([64, 64])
             .toFloat()
             .div(255);
         return expand ? tensor.expandDims() : tensor;
     });
 }
-
-// Functional model setup
-const input = tf.input({ shape: [128, 128, 3] });
-let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
-x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-x = tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }).apply(x);
-x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-x = tf.layers.flatten().apply(x);
-x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
-const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
-const model = tf.model({ inputs: input, outputs: output });
-model.compile({ optimizer: tf.train.adam(), loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
 async function loadDataset() {
     const dataset = [];
@@ -76,7 +88,7 @@ async function loadDataset() {
 
     for (const item of dataset) {
         const img = await loadImage(item.path);
-        const tensor = await processImage(img);  // no expand for training
+        const tensor = await processImage(img); // training: no expand
         imageTensors.push(tensor);
 
         const labelVector = new Array(categories.length).fill(0);
@@ -100,11 +112,12 @@ async function trainModel() {
     });
     xs.dispose();
     ys.dispose();
-    testlog.innerHTML += "<br><br>Training Complete";
+    testlog.innerHTML += "<br><br>✅ Training Complete!";
 }
 
 async function classifyExtractedImages(pdfUrl) {
     const images = await extractImagesFromPDF(pdfUrl);
+
     for (let i = 0; i < images.length; i++) {
         await classifySingleImage(images[i], i);
         await tf.nextFrame();
@@ -115,6 +128,7 @@ async function classifySingleImage(imgSrc, pageIndex) {
     return new Promise((resolve) => {
         const img = new Image();
         img.src = imgSrc;
+
         img.onload = async () => {
             const tensor = await processImage(img, true);
             const prediction = model.predict(tensor);
@@ -162,19 +176,6 @@ async function extractImagesFromPDF(pdfUrl) {
 }
 
 $(document).ready(() => {
-    $("#imageUpload").on("click", function () {
-        $("#imageUpload").val(null);
-    });
-    $("#imageUpload").on("change", function (event) {
-        const file = event.target.files[0];
-        const url = URL.createObjectURL(file);
-        classifyExtractedImages(url);
-    });
-
-    // Wait for backend before training
-    (async () => {
-        await setupBackend();
-        await trainModel();
-    })();
+    setupBackendAndRun();
 });
 </script>
