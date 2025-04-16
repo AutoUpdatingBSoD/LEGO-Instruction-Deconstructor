@@ -35,7 +35,7 @@
 
     async function loadModel() {
       try {
-        model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
+        model = await tf.loadLayersModel('model/lego-classifier.json');
         console.log("✅ Model loaded.");
       } catch (e) {
         console.error("❌ Failed to load model:", e);
@@ -67,4 +67,27 @@
     }
 
     function handleImageUpload(event) {
-      const file = event.target.files[
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const img = document.getElementById('preview');
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        img.onload = () => classifyImage(img);
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function main() {
+      await tf.setBackend('webgl');
+      await tf.ready();
+      await loadModel();
+
+      document.getElementById('imageInput').addEventListener('change', handleImageUpload);
+    }
+
+    main();
+  </script>
+</body>
+</html>
