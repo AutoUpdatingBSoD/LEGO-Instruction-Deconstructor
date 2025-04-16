@@ -1,43 +1,22 @@
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.14.0/dist/tf-backend-wasm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-
 <input type="file" id="imageUpload" multiple>
 <div id="testlog"></div>
-
 <script>
 const testlog = document.getElementById("testlog");
 const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+
 let model;
 
-async function setupBackendAndRun() {
-    testlog.innerHTML += "<br>Loading WebAssembly backend, please wait...";
-    await tf.setBackend('wasm');
-    await tf.ready();
-    testlog.innerHTML += "<br>WASM backend ready!";
-
-    setupModel();
-    await trainModel();
-
-    $("#imageUpload").on("click", function () {
-        $("#imageUpload").val(null);
-    });
-    $("#imageUpload").on("change", function (event) {
-        const file = event.target.files[0];
-        const url = URL.createObjectURL(file);
-        classifyExtractedImages(url);
-    });
-}
-
-function setupModel() {
-    const input = tf.input({ shape: [64, 64, 3] });
-    let x = tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu' }).apply(input);
+async function setupModel() {
+    const input = tf.input({ shape: [128, 128, 3] });
+    let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
     x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-    x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(x);
+    x = tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }).apply(x);
     x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
     x = tf.layers.flatten().apply(x);
-    x = tf.layers.dense({ units: 64, activation: 'relu' }).apply(x);
+    x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
     const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
 
     model = tf.model({ inputs: input, outputs: output });
@@ -56,7 +35,7 @@ async function loadImage(url) {
 async function processImage(img, expand = false) {
     return tf.tidy(() => {
         let tensor = tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([64, 64])
+            .resizeNearestNeighbor([128, 128])
             .toFloat()
             .div(255);
         return expand ? tensor.expandDims() : tensor;
@@ -88,7 +67,7 @@ async function loadDataset() {
 
     for (const item of dataset) {
         const img = await loadImage(item.path);
-        const tensor = await processImage(img); // training: no expand
+        const tensor = await processImage(img);
         imageTensors.push(tensor);
 
         const labelVector = new Array(categories.length).fill(0);
@@ -103,6 +82,10 @@ async function loadDataset() {
 }
 
 async function trainModel() {
+    await tf.setBackend('cpu');
+    await tf.ready();
+    await setupModel();
+
     const { xs, ys } = await loadDataset();
     await model.fit(xs, ys, {
         epochs: 20,
@@ -112,7 +95,11 @@ async function trainModel() {
     });
     xs.dispose();
     ys.dispose();
-    testlog.innerHTML += "<br><br>✅ Training Complete!";
+    testlog.innerHTML += "<br><br>Training Complete";
+
+    // Switch to wasm for inference
+    await tf.setBackend('wasm');
+    await tf.ready();
 }
 
 async function classifyExtractedImages(pdfUrl) {
@@ -176,6 +163,14 @@ async function extractImagesFromPDF(pdfUrl) {
 }
 
 $(document).ready(() => {
-    setupBackendAndRun();
+    $("#imageUpload").on("click", function () {
+        $("#imageUpload").val(null);
+    });
+    $("#imageUpload").on("change", function (event) {
+        const file = event.target.files[0];
+        const url = URL.createObjectURL(file);
+        classifyExtractedImages(url);
+    });
+    trainModel();
 });
 </script>
