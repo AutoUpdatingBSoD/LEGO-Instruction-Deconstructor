@@ -19,7 +19,7 @@
     async function setupModel() {
         await tf.setBackend('webgl');
         await tf.ready();
-        model = await tf.loadLayersModel('model/lego-classifier.json');
+        model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
         console.log('Model loaded and backend initialized');
     }
 
