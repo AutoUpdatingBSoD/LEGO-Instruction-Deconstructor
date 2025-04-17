@@ -28,7 +28,7 @@
 
         for (let label = 0; label < categories.length; label++) {
             for (let i = 0; i < indices[label]; i++) {
-                const imgPath = `${imageDir}/${categories[label]}_${i}.png`;
+                const imgPath = `${imageDir}/${categories[label]} ${i}.png`;
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.src = imgPath;
