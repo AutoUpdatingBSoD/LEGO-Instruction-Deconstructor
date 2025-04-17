@@ -1,93 +1,85 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>LEGO Classifier - Testing</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        canvas { display: none; }
-        .result { margin-top: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>LEGO Classifier Testing</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 </head>
 <body>
-    <h1>LEGO Classifier - Multi-Label PDF Testing</h1>
-    <input type="file" id="pdf-upload" accept="application/pdf">
-    <div id="results"></div>
+  <h2>LEGO Multi-Label Classifier - Testing</h2>
+  <input type="file" id="pdfInput" accept="application/pdf">
+  <button onclick="processPDF()">Process PDF</button>
+  <div id="output"></div>
 
-    <script>
-        const categories = [
-            'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
-            'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-        ];
+<script>
+const categories = [
+  'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
+  'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+];
+let model;
 
-        const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+async function loadModel() {
+  await tf.setBackend('webgl').catch(async () => {
+    await tf.setBackend('wasm').catch(async () => {
+      await tf.setBackend('cpu');
+    });
+  });
+  await tf.ready();
+  model = await tf.loadLayersModel('model/modelfiles/model.json');
+}
 
-        let model;
+async function processPDF() {
+  const file = document.getElementById('pdfInput').files[0];
+  if (!file) return;
+  document.getElementById('output').innerHTML = 'Loading model and PDF...';
 
-        async function setupBackend() {
-            try {
-                await tf.setBackend('webgl');
-            } catch (e) {
-                try {
-                    await tf.setBackend('wasm');
-                } catch (e2) {
-                    await tf.setBackend('cpu');
-                }
-            }
-            await tf.ready();
-        }
+  await loadModel();
 
-        async function loadModel() {
-            model = await tf.loadLayersModel('model/modelfiles/model.json');
-            console.log('Model loaded');
-        }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const results = [];
 
-        function imageDataToTensor(imageData) {
-            return tf.tidy(() => {
-                const { data, width, height } = imageData;
-                const floatData = Float32Array.from(data).filter((_, i) => i % 4 !== 3); // Remove alpha
-                const imgTensor = tf.tensor(floatData, [height, width, 3], 'float32');
-                return imgTensor.div(255).resizeBilinear([64, 64]).expandDims(0);
-            });
-        }
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
 
-        async function extractImagesFromPDF(file) {
-            const resultsContainer = document.getElementById('results');
-            resultsContainer.innerHTML = '';
+    await page.render({ canvasContext: context, viewport }).promise;
 
-            const loadingTask = pdfjsLib.getDocument({ url: URL.createObjectURL(file) });
-            const pdf = await loadingTask.promise;
+    const predictions = await detectAndClassify(canvas);
+    results.push({ page: i, predictions });
+  }
 
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+  document.getElementById('output').innerHTML = '<pre>' + JSON.stringify(results, null, 2) + '</pre>';
+}
 
-            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                const page = await pdf.getPage(pageNum);
-                const viewport = page.getViewport({ scale: 2.0 });
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                await page.render({ canvasContext: ctx, viewport }).promise;
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+async function detectAndClassify(canvas) {
+  const results = [];
+  const fullImg = tf.browser.fromPixels(canvas).toFloat().div(255);
+  const [imgH, imgW] = fullImg.shape.slice(0, 2);
+  const cropSize = 128;
 
-                const input = imageDataToTensor(imageData);
-                const prediction = model.predict(input).dataSync();
-
-                const output = document.createElement('div');
-                output.classList.add('result');
-                output.innerHTML = `<strong>Page ${pageNum}:</strong><br>` +
-                    categories.map((label, i) => `${label}: ${(prediction[i] * 100).toFixed(2)}%`).join('<br>');
-                resultsContainer.appendChild(output);
-            }
-        }
-
-        document.getElementById('pdf-upload').addEventListener('change', async (e) => {
-            await setupBackend();
-            await loadModel();
-            const file = e.target.files[0];
-            if (file) await extractImagesFromPDF(file);
-        });
-    </script>
+  for (let y = 0; y < imgH - cropSize; y += cropSize) {
+    for (let x = 0; x < imgW - cropSize; x += cropSize) {
+      const crop = tf.image.cropAndResize(
+        fullImg.expandDims(0),
+        [[y / imgH, x / imgW, (y + cropSize) / imgH, (x + cropSize) / imgW]],
+        [0], [64, 64]);
+      const prediction = model.predict(crop).dataSync();
+      const labels = prediction.map((v, idx) => v > 0.5 ? categories[idx] : null).filter(Boolean);
+      if (labels.length > 0) {
+        results.push({ box: [x, y, cropSize, cropSize], labels });
+      }
+      tf.dispose(crop);
+    }
+  }
+  tf.dispose(fullImg);
+  return results;
+}
+</script>
 </body>
 </html>
