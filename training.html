@@ -31,22 +31,40 @@
         function getLabelVector(item) {
             const labelVector = new Array(categories.length).fill(0);  // Start with a vector of all 0s
 
-            if (item.label == 0) {
-                labelVector[0] = 1;  // Mark the category for bagset
-            }
-            if (item.label == 1) {
-                labelVector[1] = 1;  // Mark the category for dontreadrepeat
-            }
-            if (item.label == 2) {
-                labelVector[2] = 1;  // Mark the category for finish
-                labelVector[4] = 1;  // Mark pageno as part of the multi-label case
-            }
-            if (item.label == 3) {
-                labelVector[3] = 1;  // Mark index
-                labelVector[4] = 1;  // Mark pageno as part of the multi-label case
-                labelVector[5] = 1;  // Mark part as part of the multi-label case
-                labelVector[7] = 1;  // Mark repeat as part of the multi-label case
-            }
+const labelVector = new Array(categories.length).fill(0);
+
+// Just mark each category that applies directly:
+if (item.label == 0) {
+    labelVector = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+}
+if (item.label == 1) {
+    labelVector = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+}
+if (item.label == 2) {
+    labelVector = [0, 0, 1, 0, 1, 0, 0, 0, 0, 0]; // Multi-label case (index is also relevant)
+}
+if (item.label == 3) {
+    labelVector = [0, 0, 0, 1, 1, 1, 0, 1, 0, 0]; // Multi-label case (index, partstep, repeat)
+}
+if (item.label == 4) {
+    labelVector = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
+}
+if (item.label == 5) {
+    labelVector = [0, 0, 0, 0, 0, 1, 0, 1, 0, 0];
+}
+if (item.label == 6) {
+    labelVector = [0, 0, 0, 0, 0, 0, 1, 1, 0, 0];
+}
+if (item.label == 7) {
+    labelVector = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0];
+}
+if (item.label == 8) {
+    labelVector = [0, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+}
+if (item.label == 9) {
+    labelVector = [0, 1, 0, 0, 0, 0, 0, 0, 0, 1]; 
+}
+
 
             return labelVector;
         }
