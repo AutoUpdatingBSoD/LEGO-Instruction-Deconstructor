@@ -1,113 +1,107 @@
+<!-- training.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TensorFlow.js LEGO Training</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <meta charset="UTF-8">
+  <title>LEGO Training</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
 </head>
 <body>
-    <h1>Training TensorFlow.js Model</h1>
+  <h1>LEGO Model Trainer</h1>
+  <input type="file" id="imageUpload" multiple accept="image/*">
+  <button onclick="trainModel()">Train</button>
+  <button onclick="saveModel()">Save Model</button>
+  <script>
+    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+    const width = 64, height = 64;
 
-    <script>
-        // List of categories for multi-label classification
-        const categories = [
-            'bagset',        // category 0
-            'dontreadrepeat',// category 1
-            'finish',        // category 2
-            'index',         // category 3
-            'pageno',        // category 4
-            'part',          // category 5
-            'partstep',      // category 6
-            'repeat',        // category 7
-            'splitdecision', // category 8
-            'subbuild'       // category 9
-        ];
+    let xs = [], ys = [];
 
-        // Example: Random generated image data (simulating image data)
-        const numSamples = 10;
-        const height = 64;
-        const width = 64;
-        const channels = 3;
+    async function loadImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = e => {
+          img.src = e.target.result;
+        };
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const tensor = tf.browser.fromPixels(imageData).toFloat().div(255).expandDims();
+          resolve(tensor);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
 
-        // Simulating random image data (10 samples, 64x64 RGB images)
-        const imageData = new Array(numSamples * height * width * channels).fill(0).map(() => Math.random());
-
-        // Example multi-hot encoded labels for each of the 10 samples
-        const labels = [
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], // Sample 1: category_1
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0], // Sample 2: category_2
-            [0, 0, 1, 0, 1, 0, 0, 0, 0, 0], // Sample 3: category_3 and category_5
-            [0, 0, 0, 1, 1, 1, 0, 1, 0, 0], // Sample 4: category_4, 5, 7
-            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0], // Sample 5: category_5
-            [0, 0, 0, 0, 0, 1, 0, 1, 0, 0], // Sample 6: category_6 and category_8
-            [0, 0, 0, 0, 0, 0, 1, 1, 0, 0], // Sample 7: category_7 and category_9
-            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0], // Sample 8: category_8
-            [0, 0, 0, 0, 1, 0, 0, 0, 1, 0], // Sample 9: category_5 and category_9
-            [0, 1, 0, 0, 0, 0, 0, 0, 0, 1]  // Sample 10: category_2 and category_10
-        ];
-
-        // Create image tensor (4D tensor) [num_samples, height, width, channels]
-        const imageTensor = tf.tensor4d(imageData, [numSamples, height, width, channels]);
-
-        // Create label tensor (2D tensor) [num_samples, num_categories]
-        const labelTensor = tf.tensor2d(labels);
-
-        // Define the model
-        const model = tf.sequential();
-        
-        // Add layers to the model
-        model.add(tf.layers.conv2d({
-            filters: 32,
-            kernelSize: 3,
-            activation: 'relu',
-            inputShape: [height, width, channels]
-        }));
-        model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
-        model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' })); // Sigmoid for multi-label classification
-
-        // Compile the model
-        model.compile({
-            optimizer: 'adam',
-            loss: 'binaryCrossentropy', // Loss for multi-label classification
-            metrics: ['accuracy']
-        });
-
-        // Choose a backend (WebGL is default, fall back to CPU or WASM)
-        async function setBackend() {
-            await tf.setBackend('webgl'); // You can try 'cpu' or 'wasm' if needed
-            console.log("Backend set to WebGL.");
+    async function trainModel() {
+      await tf.setBackend('webgl');
+      await tf.ready();
+      if (!tf.getBackend() || tf.getBackend() === 'cpu') {
+        try {
+          await tf.setBackend('wasm');
+        } catch (e) {
+          await tf.setBackend('cpu');
         }
+      }
 
-        // Train the model
-        async function trainModel() {
-            await setBackend(); // Ensure WebGL or the selected backend is set
-            await model.fit(imageTensor, labelTensor, {
-                epochs: 10,
-                batchSize: 2,
-                validationSplit: 0.2,
-                callbacks: tf.callbacks.earlyStopping({ patience: 3 })
-            });
-            console.log("Model training completed!");
-            await model.save('downloads://lego-classifier');
+      const files = document.getElementById('imageUpload').files;
+      for (const file of files) {
+        const label = parseInt(file.name.split("_")[0]); // assumes label_prefix.png
+        const tensor = await loadImage(file);
+        xs.push(tensor);
 
+        // multi-label setup
+        const labelVector = new Array(categories.length).fill(0);
+        switch (label) {
+          case 0: labelVector[0] = 1; break;
+          case 1: labelVector[1] = 1; break;
+          case 2: labelVector[2] = 1; labelVector[4] = 1; break;
+          case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+          case 4: labelVector[4] = 1; break;
+          case 5: labelVector[5] = 1; labelVector[7] = 1; break;
+          case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+          case 7: labelVector[7] = 1; break;
+          case 8: labelVector[4] = 1; labelVector[8] = 1; break;
+          case 9: labelVector[1] = 1; labelVector[9] = 1; break;
         }
+        ys.push(labelVector);
+      }
 
-        // Start training
-        trainModel();
+      const xTensor = tf.concat(xs);
+      const yTensor = tf.tensor2d(ys);
 
-        // Function to predict with the model
-        async function makePrediction(imageData) {
-            const prediction = model.predict(imageData);  // Predict using new image data
-            prediction.print();  // Display the predictions
-        }
+      const model = tf.sequential();
+      model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu', inputShape: [height, width, 3] }));
+      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+      model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+      model.add(tf.layers.flatten());
+      model.add(tf.layers.dropout({ rate: 0.5 }));
+      model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+      model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 
-        // Example: Predicting with random new data
-        const randomNewImageData = new Array(height * width * channels).fill(0).map(() => Math.random());
-        const newImageTensor = tf.tensor4d(randomNewImageData, [1, height, width, channels]);
-        makePrediction(newImageTensor);
-    </script>
+      model.compile({ loss: 'binaryCrossentropy', optimizer: 'adam', metrics: ['accuracy'] });
+
+      await model.fit(xTensor, yTensor, {
+        epochs: 10,
+        batchSize: 16,
+        callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 2 })
+      });
+
+      window.trainedModel = model;
+    }
+
+    async function saveModel() {
+      if (window.trainedModel) {
+        await window.trainedModel.save('downloads://lego-model');
+      }
+    }
+  </script>
 </body>
 </html>
