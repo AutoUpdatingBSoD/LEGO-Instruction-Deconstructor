@@ -2,123 +2,140 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>LEGO Classifier Training</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorFlow.js Training</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm"></script>
 </head>
 <body>
-    <div id="trainlog">Training in progress...</div>
-
+    <h1>TensorFlow.js Training</h1>
+    <div id="output"></div>
+    <button id="downloadModelButton" style="display:none;">Download Model</button>
+    
     <script>
-        const trainlog = document.getElementById("trainlog");
-        const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+        const categories = [
+            'bagset',        // category 0
+            'dontreadrepeat',// category 1
+            'finish',        // category 2
+            'index',         // category 3
+            'pageno',        // category 4
+            'part',          // category 5
+            'partstep',      // category 6
+            'repeat',        // category 7
+            'splitdecision', // category 8
+            'subbuild'       // category 9
+        ];
 
-        async function setupBackend() {
-            const backends = ['webgl', 'wasm', 'cpu'];
-            for (const backend of backends) {
-                try {
-                    await tf.setBackend(backend);
-                    await tf.ready();
-                    console.log(`Using backend: ${tf.getBackend()}`);
-                    break;
-                } catch (e) {
-                    console.warn(`Backend '${backend}' failed to initialize.`);
-                }
+        // Example of how you'd set the labelVector for each item (adjust this based on your actual data)
+        function getLabelVector(item) {
+            const labelVector = new Array(categories.length).fill(0);  // Start with a vector of all 0s
+
+            if (item.label == 0) {
+                labelVector[0] = 1;  // Mark the category for bagset
             }
-        }
-
-        async function loadImage(url) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.src = url;
-                img.onload = () => resolve(img);
-            });
-        }
-
-        async function processImage(img) {
-            return tf.tidy(() => {
-                return tf.browser.fromPixels(img)
-                    .resizeNearestNeighbor([64, 64])
-                    .toFloat()
-                    .div(255);
-            });
-        }
-
-        async function loadDataset() {
-            const dataset = [];
-            const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
-            const baseDir = 'model/dataset/';
-
-            for (let j = 0; j < categories.length; j++) {
-                const category = categories[j];
-                const jth = indices[j];
-                for (let i = 1; i <= jth; i++) {
-                    const imageUrl = `${baseDir}${category}/${category} ${i}.png`;
-                    try {
-                        const response = await fetch(imageUrl, { method: 'HEAD' });
-                        if (!response.ok) break;
-                        dataset.push({ path: imageUrl, label: j });
-                    } catch (error) {
-                        break;
-                    }
-                }
+            if (item.label == 1) {
+                labelVector[1] = 1;  // Mark the category for dontreadrepeat
+            }
+            if (item.label == 2) {
+                labelVector[2] = 1;  // Mark the category for finish
+                labelVector[4] = 1;  // Mark pageno as part of the multi-label case
+            }
+            if (item.label == 3) {
+                labelVector[3] = 1;  // Mark index
+                labelVector[4] = 1;  // Mark pageno as part of the multi-label case
+                labelVector[5] = 1;  // Mark part as part of the multi-label case
+                labelVector[7] = 1;  // Mark repeat as part of the multi-label case
             }
 
-            const imageTensors = [];
-            const labels = [];
-
-            for (const item of dataset) {
-                const img = await loadImage(item.path);
-                const tensor = await processImage(img);
-                imageTensors.push(tensor);
-
-                const labelVector = new Array(categories.length).fill(0);
-                labelVector[item.label] = 1;
-                labels.push(labelVector);
-            }
-
-            return {
-                xs: tf.stack(imageTensors),
-                ys: tf.tensor2d(labels)
-            };
+            return labelVector;
         }
 
         async function trainModel() {
-            const input = tf.input({ shape: [64, 64, 3] });
-            let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
-            x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-            x = tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }).apply(x);
-            x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
-            x = tf.layers.flatten().apply(x);
-            x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
-            const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
+            await initializeBackend();  // Initialize the selected backend
 
-            const model = tf.model({ inputs: input, outputs: output });
+            const model = tf.sequential();
+            model.add(tf.layers.conv2d({
+                filters: 32,
+                kernelSize: 3,
+                activation: 'relu',
+                inputShape: [64, 64, 3],  // Update based on your input image size
+            }));
+            model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+            model.add(tf.layers.flatten());
+            model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+            model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));  // Multi-label output
+
             model.compile({
                 optimizer: tf.train.adam(),
-                loss: 'binaryCrossentropy',
-                metrics: ['accuracy']
+                loss: 'binaryCrossentropy',  // Loss for multi-label classification
+                metrics: ['accuracy'],
             });
 
-            const { xs, ys } = await loadDataset();
+            const data = await fetchTrainingData();
+            const xs = tf.tensor4d(data.images);  // Make sure images are preprocessed to tensors
+            const ys = tf.tensor2d(data.labels);  // The labels should be in the form of label vectors
 
             await model.fit(xs, ys, {
                 epochs: 20,
                 batchSize: 16,
                 validationSplit: 0.2,
-                callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+                callbacks: tf.callbacks.earlyStopping({ patience: 3 }),
             });
 
-            await model.save('downloads://lego-classifier');
-            xs.dispose();
-            ys.dispose();
-            trainlog.innerHTML += "<br><br><strong>Training Complete</strong><br>Model downloaded.";
+            console.log('Model training complete');
+            document.getElementById('output').innerText = 'Training complete!';
+            document.getElementById('downloadModelButton').style.display = 'block';  // Show the download button
+            modelJson = await model.toJSON();
         }
 
-        (async () => {
-            await setupBackend();
-            await trainModel();
-        })();
+        async function initializeBackend() {
+            // Try using WebGL, fallback to WASM if WebGL is unavailable
+            try {
+                await tf.setBackend('webgl');
+                await tf.ready();
+                console.log('WebGL backend initialized');
+            } catch (error) {
+                console.error('WebGL initialization failed, falling back to WASM');
+                await tf.setBackend('wasm');
+                await tf.ready();
+                console.log('WASM backend initialized');
+            }
+        }
+
+        async function fetchTrainingData() {
+            // Fetch or prepare your training data
+            // Example data format:
+            // { images: [...], labels: [...] }
+            // In your case, you'd need to load your images and associate labels as the labelVector
+
+            const images = [];  // This should be your image data
+            const labels = [];  // This should be the corresponding labels in the form of the labelVector
+
+            // Example:
+            const item = { label: 3 };  // Example item with label 3 (index)
+            const labelVector = getLabelVector(item);
+            labels.push(labelVector);
+
+            // Push image tensor here (make sure your images are properly formatted as tensors)
+            // images.push(preprocessedImageTensor);
+
+            return { images, labels };
+        }
+
+        // Function to download the model as a JSON file
+        document.getElementById('downloadModelButton').addEventListener('click', function() {
+            const jsonBlob = new Blob([JSON.stringify(modelJson)], { type: 'application/json' });
+            const url = URL.createObjectURL(jsonBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'lego-classifier-model.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+
+        trainModel().catch(console.error);
     </script>
 </body>
 </html>
