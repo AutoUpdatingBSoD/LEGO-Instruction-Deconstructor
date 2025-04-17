@@ -104,7 +104,7 @@
 
         // Example: Predicting with random new data
         const randomNewImageData = new Array(height * width * channels).fill(0).map(() => Math.random());
-        const newImageTensor = tf.tensor4d([randomNewImageData], [1, height, width, channels]);  // New single image input
+        const newImageTensor = tf.tensor4d(randomNewImageData, [1, height, width, channels]);
         makePrediction(newImageTensor);
     </script>
 </body>
