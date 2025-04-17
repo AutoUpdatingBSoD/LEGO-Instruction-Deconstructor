@@ -1,71 +1,91 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>LEGO Multi-Label Classifier Training</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
+    <title>LEGO Classifier - Training</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 </head>
 <body>
-<h2>Training LEGO Classifier</h2>
-<input type="file" id="imageInput" webkitdirectory directory multiple accept="image/*">
-<button onclick="startTraining()">Start Training</button>
+<h1>Training LEGO Classifier</h1>
+<p id="status">Loading...</p>
 
-<script>
-let model;
+<script type="module">
+import { images, indices } from './images/indexlist.js';
+
 const categories = [
     'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
     'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
 ];
-const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
 
-async function startTraining() {
+const labelMap = [
+    [1,0,0,0,0,0,0,0,0,0],  // bagset
+    [0,1,0,0,0,0,0,0,0,0],  // dontreadrepeat
+    [0,0,1,0,1,0,0,0,0,0],  // finish
+    [0,0,0,1,1,1,0,1,0,0],  // index
+    [0,0,0,0,1,0,0,0,0,0],  // pageno
+    [0,0,0,0,0,1,0,1,0,0],  // part
+    [0,0,0,0,0,0,1,1,0,0],  // partstep
+    [0,0,0,0,0,0,0,1,0,0],  // repeat
+    [0,0,0,0,1,0,0,0,1,0],  // splitdecision
+    [0,1,0,0,0,0,0,0,0,1]   // subbuild
+];
+
+const width = 64, height = 64;
+const channels = 3;
+const xsArray = [], ysArray = [];
+
+const loadImage = async (src) => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = Float32Array.from(imageData.data).filter((_, i) => i % 4 !== 3).map(v => v / 255);
+            resolve(data);
+        };
+        img.src = src;
+    });
+};
+
+const loadAllImages = async () => {
+    for (let i = 0; i < images.length; i++) {
+        const imagePath = `images/${images[i]}`;
+        const labelIndex = indices[i];
+        const labelVector = labelMap[labelIndex];
+
+        const imageData = await loadImage(imagePath);
+        xsArray.push(imageData);
+        ysArray.push(labelVector);
+        document.getElementById('status').textContent = `Loaded ${i+1} / ${images.length}`;
+    }
+};
+
+const run = async () => {
     await tf.setBackend('webgl').catch(async () => {
-        await tf.setBackend('wasm').catch(async () => {
-            await tf.setBackend('cpu');
-        });
+        await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
     });
     await tf.ready();
 
-    const imageInput = document.getElementById('imageInput');
-    const imageFiles = Array.from(imageInput.files);
+    await loadAllImages();
 
-    const imageTensors = [];
-    const labelTensors = [];
-    for (const file of imageFiles) {
-        const img = new Image();
-        const reader = new FileReader();
-        const loadPromise = new Promise((resolve) => {
-            reader.onload = () => {
-                img.onload = async () => {
-                    const tensor = tf.browser.fromPixels(img).resizeNearestNeighbor([64, 64]).toFloat().div(255).expandDims();
-                    imageTensors.push(tensor);
+    const xs = tf.tensor4d(xsArray, [xsArray.length, height, width, channels]);
+    const ys = tf.tensor2d(ysArray);
 
-                    const label = getLabelFromFilename(file.name);
-                    labelTensors.push(tf.tensor2d([label], [1, categories.length]));
+    const input = tf.input({ shape: [height, width, channels] });
+    let x = tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }).apply(input);
+    x = tf.layers.maxPooling2d({ poolSize: [2, 2] }).apply(x);
+    x = tf.layers.flatten().apply(x);
+    x = tf.layers.dense({ units: 128, activation: 'relu' }).apply(x);
+    const output = tf.layers.dense({ units: categories.length, activation: 'sigmoid' }).apply(x);
 
-                    resolve();
-                };
-                img.src = reader.result;
-            };
-            reader.readAsDataURL(file);
-        });
-        await loadPromise;
-    }
-
-    const xs = tf.concat(imageTensors);
-    const ys = tf.concat(labelTensors);
-
-    model = tf.sequential();
-    model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
-    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-    model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
-    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-    model.add(tf.layers.flatten());
-    model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
-
+    const model = tf.model({ inputs: input, outputs: output });
     model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
+    document.getElementById('status').textContent = 'Training...';
     await model.fit(xs, ys, {
         epochs: 20,
         batchSize: 16,
@@ -74,25 +94,10 @@ async function startTraining() {
     });
 
     await model.save('downloads://lego-classifier');
-}
+    document.getElementById('status').textContent = 'Training Complete. Model saved.';
+};
 
-function getLabelFromFilename(filename) {
-    const label = parseInt(filename.split('_')[0]);
-    const vector = new Array(categories.length).fill(0);
-
-    if (label === 0) vector[0] = 1;
-    if (label === 1) vector[1] = 1;
-    if (label === 2) { vector[2] = 1; vector[4] = 1; }
-    if (label === 3) { vector[3] = 1; vector[4] = 1; vector[5] = 1; vector[7] = 1; }
-    if (label === 4) vector[4] = 1;
-    if (label === 5) { vector[5] = 1; vector[7] = 1; }
-    if (label === 6) { vector[6] = 1; vector[7] = 1; }
-    if (label === 7) vector[7] = 1;
-    if (label === 8) { vector[4] = 1; vector[8] = 1; }
-    if (label === 9) { vector[1] = 1; vector[9] = 1; }
-
-    return vector;
-}
+run();
 </script>
 </body>
 </html>
