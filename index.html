@@ -85,6 +85,7 @@
 
       await setupTF();
       const model = await loadModel();
+      const result = document.createElement('div');
       result.innerHTML = `Model Successfully Loaded`;
       outputDiv.appendChild(result);
       const pages = await extractImagesFromPDF(file);
