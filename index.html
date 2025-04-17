@@ -28,7 +28,7 @@
     }
 
     async function loadModel() {
-      return await tf.loadLayersModel('model/lego-classifier-model.json');
+      return await tf.loadLayersModel('model/modelfiles/lego-classifier-model.json');
     }
 
     function preprocessImage(imageData) {
@@ -85,7 +85,8 @@
 
       await setupTF();
       const model = await loadModel();
-
+      result.innerHTML = `Model Successfully Loaded`;
+      outputDiv.appendChild(result);
       const pages = await extractImagesFromPDF(file);
       await classifyPages(pages, model);
     });
