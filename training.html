@@ -1,107 +1,98 @@
-<!-- training.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>LEGO Training</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <meta charset="UTF-8">
+    <title>LEGO Multi-Label Classifier Training</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
 </head>
 <body>
-  <h1>LEGO Model Trainer</h1>
-  <input type="file" id="imageUpload" multiple accept="image/*">
-  <button onclick="trainModel()">Train</button>
-  <button onclick="saveModel()">Save Model</button>
-  <script>
-    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
-    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
-    const width = 64, height = 64;
+<h2>Training LEGO Classifier</h2>
+<input type="file" id="imageInput" webkitdirectory directory multiple accept="image/*">
+<button onclick="startTraining()">Start Training</button>
 
-    let xs = [], ys = [];
+<script>
+let model;
+const categories = [
+    'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
+    'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+];
+const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
 
-    async function loadImage(file) {
-      return new Promise((resolve) => {
+async function startTraining() {
+    await tf.setBackend('webgl').catch(async () => {
+        await tf.setBackend('wasm').catch(async () => {
+            await tf.setBackend('cpu');
+        });
+    });
+    await tf.ready();
+
+    const imageInput = document.getElementById('imageInput');
+    const imageFiles = Array.from(imageInput.files);
+
+    const imageTensors = [];
+    const labelTensors = [];
+    for (const file of imageFiles) {
         const img = new Image();
         const reader = new FileReader();
-        reader.onload = e => {
-          img.src = e.target.result;
-        };
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const imageData = ctx.getImageData(0, 0, width, height);
-          const tensor = tf.browser.fromPixels(imageData).toFloat().div(255).expandDims();
-          resolve(tensor);
-        };
-        reader.readAsDataURL(file);
-      });
+        const loadPromise = new Promise((resolve) => {
+            reader.onload = () => {
+                img.onload = async () => {
+                    const tensor = tf.browser.fromPixels(img).resizeNearestNeighbor([64, 64]).toFloat().div(255).expandDims();
+                    imageTensors.push(tensor);
+
+                    const label = getLabelFromFilename(file.name);
+                    labelTensors.push(tf.tensor2d([label], [1, categories.length]));
+
+                    resolve();
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+        await loadPromise;
     }
 
-    async function trainModel() {
-      await tf.setBackend('webgl');
-      await tf.ready();
-      if (!tf.getBackend() || tf.getBackend() === 'cpu') {
-        try {
-          await tf.setBackend('wasm');
-        } catch (e) {
-          await tf.setBackend('cpu');
-        }
-      }
+    const xs = tf.concat(imageTensors);
+    const ys = tf.concat(labelTensors);
 
-      const files = document.getElementById('imageUpload').files;
-      for (const file of files) {
-        const label = parseInt(file.name.split("_")[0]); // assumes label_prefix.png
-        const tensor = await loadImage(file);
-        xs.push(tensor);
+    model = tf.sequential();
+    model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+    model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+    model.add(tf.layers.flatten());
+    model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+    model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 
-        // multi-label setup
-        const labelVector = new Array(categories.length).fill(0);
-        switch (label) {
-          case 0: labelVector[0] = 1; break;
-          case 1: labelVector[1] = 1; break;
-          case 2: labelVector[2] = 1; labelVector[4] = 1; break;
-          case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
-          case 4: labelVector[4] = 1; break;
-          case 5: labelVector[5] = 1; labelVector[7] = 1; break;
-          case 6: labelVector[6] = 1; labelVector[7] = 1; break;
-          case 7: labelVector[7] = 1; break;
-          case 8: labelVector[4] = 1; labelVector[8] = 1; break;
-          case 9: labelVector[1] = 1; labelVector[9] = 1; break;
-        }
-        ys.push(labelVector);
-      }
+    model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
-      const xTensor = tf.concat(xs);
-      const yTensor = tf.tensor2d(ys);
-
-      const model = tf.sequential();
-      model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu', inputShape: [height, width, 3] }));
-      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-      model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
-      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-      model.add(tf.layers.flatten());
-      model.add(tf.layers.dropout({ rate: 0.5 }));
-      model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-      model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
-
-      model.compile({ loss: 'binaryCrossentropy', optimizer: 'adam', metrics: ['accuracy'] });
-
-      await model.fit(xTensor, yTensor, {
-        epochs: 10,
+    await model.fit(xs, ys, {
+        epochs: 20,
         batchSize: 16,
-        callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 2 })
-      });
+        validationSplit: 0.2,
+        callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+    });
 
-      window.trainedModel = model;
-    }
+    await model.save('downloads://lego-classifier');
+}
 
-    async function saveModel() {
-      if (window.trainedModel) {
-        await window.trainedModel.save('downloads://lego-model');
-      }
-    }
-  </script>
+function getLabelFromFilename(filename) {
+    const label = parseInt(filename.split('_')[0]);
+    const vector = new Array(categories.length).fill(0);
+
+    if (label === 0) vector[0] = 1;
+    if (label === 1) vector[1] = 1;
+    if (label === 2) { vector[2] = 1; vector[4] = 1; }
+    if (label === 3) { vector[3] = 1; vector[4] = 1; vector[5] = 1; vector[7] = 1; }
+    if (label === 4) vector[4] = 1;
+    if (label === 5) { vector[5] = 1; vector[7] = 1; }
+    if (label === 6) { vector[6] = 1; vector[7] = 1; }
+    if (label === 7) vector[7] = 1;
+    if (label === 8) { vector[4] = 1; vector[8] = 1; }
+    if (label === 9) { vector[1] = 1; vector[9] = 1; }
+
+    return vector;
+}
+</script>
 </body>
 </html>
