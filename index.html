@@ -1,112 +1,94 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>LEGO Classifier - Testing</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Multi-label LEGO PDF Tester</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    canvas { display: none; }
+  </style>
 </head>
 <body>
-    <h2>LEGO Instruction Classifier - Testing</h2>
-    <input type="file" id="pdfInput">
-    <div id="results"></div>
+  <h1>Upload PDF for LEGO Multi-Label Detection</h1>
+  <input type="file" id="pdfInput" accept="application/pdf">
+  <div id="output"></div>
 
-    <script>
-    const categories = ['bagset', 'dontreadrepeat', 'finish', 'index', 'pageno', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
-    let model;
+  <script>
+    const categories = ['bagset', 'dontreadrepeat', 'finished', 'index', 'part', 'partstep', 'repeat', 'splitdecision', 'subbuild', 'pageno'];
 
-    async function setupModel() {
+    async function setupTF() {
+      try {
         await tf.setBackend('webgl');
-        await tf.ready();
-        model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
-        console.log('Model loaded and backend initialized');
+      } catch {
+        await tf.setBackend('wasm');
+      }
+      await tf.ready();
     }
 
-    async function processImage(img) {
-        return tf.tidy(() => {
-            return tf.browser.fromPixels(img)
-                .resizeNearestNeighbor([64, 64])
-                .toFloat()
-                .div(255)
-                .expandDims();
-        });
+    async function loadModel() {
+      return await tf.loadLayersModel('model/lego-classifier-model.json');
     }
 
-    async function classifyImage(img, pageIndex) {
-        const tensor = await processImage(img);
-        const prediction = model.predict(tensor);
-        const data = await prediction.data();
-        const threshold = 0.5;
-        const result = [];
-
-        data.forEach((val, i) => {
-            if (val > threshold) {
-                result.push({ category: categories[i], confidence: val.toFixed(2) });
-            }
-        });
-
-        tf.dispose([tensor, prediction]);
-
-        return { page: pageIndex, results: result };
+    function preprocessImage(imageData) {
+      const tensor = tf.browser.fromPixels(imageData)
+        .resizeNearestNeighbor([64, 64])
+        .toFloat()
+        .div(255.0)
+        .expandDims(0);
+      return tensor;
     }
 
     async function extractImagesFromPDF(file) {
-        const fileURL = URL.createObjectURL(file);
-        const pdf = await pdfjsLib.getDocument(fileURL).promise;
-        const allResults = [];
+      const loadingTask = pdfjsLib.getDocument(URL.createObjectURL(file));
+      const pdf = await loadingTask.promise;
+      const pages = [];
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
 
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
 
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            const image = new Image();
-            image.src = canvas.toDataURL("image/jpeg");
+        await page.render({ canvasContext: ctx, viewport }).promise;
 
-            await new Promise(res => image.onload = res);
-            const result = await classifyImage(image, i);
-            allResults.push(result);
-        }
+        pages.push(canvas);
+      }
 
-        return allResults;
+      return pages;
     }
 
-    function displayResults(results) {
-        const container = document.getElementById("results");
-        container.innerHTML = "<h3>Classification Results:</h3>";
+    async function classifyPages(pages, model) {
+      const outputDiv = document.getElementById("output");
+      outputDiv.innerHTML = '';
 
-        results.forEach(pageResult => {
-            const div = document.createElement("div");
-            div.innerHTML = `<strong>Page ${pageResult.page}:</strong><br>`;
-            if (pageResult.results.length === 0) {
-                div.innerHTML += "No categories detected.<br><br>";
-            } else {
-                pageResult.results.forEach(res => {
-                    div.innerHTML += `- ${res.category} (confidence: ${res.confidence})<br>`;
-                });
-                div.innerHTML += "<br>";
-            }
-            container.appendChild(div);
-        });
+      for (let i = 0; i < pages.length; i++) {
+        const tensor = preprocessImage(pages[i]);
+        const prediction = await model.predict(tensor).data();
+
+        const threshold = 0.5;
+        const labels = prediction.map((v, idx) => v > threshold ? categories[idx] : null).filter(v => v !== null);
+
+        const result = document.createElement('div');
+        result.innerHTML = `<strong>Page ${i + 1}</strong>: ${labels.join(', ') || 'No labels detected'}`;
+        outputDiv.appendChild(result);
+      }
     }
 
-    $(document).ready(() => {
-        setupModel();
+    document.getElementById("pdfInput").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
 
-        $("#pdfInput").on("change", async (event) => {
-            const file = event.target.files[0];
-            if (!file || !model) return;
+      await setupTF();
+      const model = await loadModel();
 
-            const results = await extractImagesFromPDF(file);
-            displayResults(results);
-        });
+      const pages = await extractImagesFromPDF(file);
+      await classifyPages(pages, model);
     });
-    </script>
+  </script>
 </body>
 </html>
