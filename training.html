@@ -3,156 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TensorFlow.js Training</title>
+    <title>TensorFlow.js Training Example</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm"></script>
 </head>
 <body>
-    <h1>TensorFlow.js Training</h1>
-    <div id="output"></div>
-    <button id="downloadModelButton" style="display:none;">Download Model</button>
-    
+    <h1>Training TensorFlow.js Model</h1>
+
     <script>
+        // List of categories for multi-label classification
         const categories = [
-            'bagset',        // category 0
-            'dontreadrepeat',// category 1
-            'finish',        // category 2
-            'index',         // category 3
-            'pageno',        // category 4
-            'part',          // category 5
-            'partstep',      // category 6
-            'repeat',        // category 7
-            'splitdecision', // category 8
-            'subbuild'       // category 9
+            'category_1', 'category_2', 'category_3', 'category_4', 'category_5', 
+            'category_6', 'category_7', 'category_8', 'category_9', 'category_10'
         ];
 
-        // Example of how you'd set the labelVector for each item (adjust this based on your actual data)
-        function getLabelVector(item) {
-            var labelVector = new Array(categories.length).fill(0);  // Start with a vector of all 0s
+        // Example: Random generated image data (simulating image data)
+        const numSamples = 10;
+        const height = 64;
+        const width = 64;
+        const channels = 3;
 
+        // Simulating random image data (10 samples, 64x64 RGB images)
+        const imageData = new Array(numSamples * height * width * channels).fill(0).map(() => Math.random());
 
-// Just mark each category that applies directly:
-if (item.label == 0) {
-    labelVector = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-}
-if (item.label == 1) {
-    labelVector = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0];
-}
-if (item.label == 2) {
-    labelVector = [0, 0, 1, 0, 1, 0, 0, 0, 0, 0]; // Multi-label case (index is also relevant)
-}
-if (item.label == 3) {
-    labelVector = [0, 0, 0, 1, 1, 1, 0, 1, 0, 0]; // Multi-label case (index, partstep, repeat)
-}
-if (item.label == 4) {
-    labelVector = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
-}
-if (item.label == 5) {
-    labelVector = [0, 0, 0, 0, 0, 1, 0, 1, 0, 0];
-}
-if (item.label == 6) {
-    labelVector = [0, 0, 0, 0, 0, 0, 1, 1, 0, 0];
-}
-if (item.label == 7) {
-    labelVector = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0];
-}
-if (item.label == 8) {
-    labelVector = [0, 0, 0, 0, 1, 0, 0, 0, 1, 0];
-}
-if (item.label == 9) {
-    labelVector = [0, 1, 0, 0, 0, 0, 0, 0, 0, 1]; 
-}
+        // Example multi-hot encoded labels for each of the 10 samples
+        const labels = [
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], // Sample 1: category_1
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0], // Sample 2: category_2
+            [0, 0, 1, 0, 1, 0, 0, 0, 0, 0], // Sample 3: category_3 and category_5
+            [0, 0, 0, 1, 1, 1, 0, 1, 0, 0], // Sample 4: category_4, 5, 7
+            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0], // Sample 5: category_5
+            [0, 0, 0, 0, 0, 1, 0, 1, 0, 0], // Sample 6: category_6 and category_8
+            [0, 0, 0, 0, 0, 0, 1, 1, 0, 0], // Sample 7: category_7 and category_9
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0], // Sample 8: category_8
+            [0, 0, 0, 0, 1, 0, 0, 0, 1, 0], // Sample 9: category_5 and category_9
+            [0, 1, 0, 0, 0, 0, 0, 0, 0, 1]  // Sample 10: category_2 and category_10
+        ];
 
+        // Create image tensor (4D tensor) [num_samples, height, width, channels]
+        const imageTensor = tf.tensor4d(imageData, [numSamples, height, width, channels]);
 
-            return labelVector;
-        }
+        // Create label tensor (2D tensor) [num_samples, num_categories]
+        const labelTensor = tf.tensor2d(labels);
 
-        async function trainModel() {
-            await initializeBackend();  // Initialize the selected backend
+        // Define the model
+        const model = tf.sequential();
+        
+        // Add layers to the model
+        model.add(tf.layers.conv2d({
+            filters: 32,
+            kernelSize: 3,
+            activation: 'relu',
+            inputShape: [height, width, channels]
+        }));
+        model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
+        model.add(tf.layers.flatten());
+        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' })); // Sigmoid for multi-label classification
 
-            const model = tf.sequential();
-            model.add(tf.layers.conv2d({
-                filters: 32,
-                kernelSize: 3,
-                activation: 'relu',
-                inputShape: [64, 64, 3],  // Update based on your input image size
-            }));
-            model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
-            model.add(tf.layers.flatten());
-            model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-            model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));  // Multi-label output
-
-            model.compile({
-                optimizer: tf.train.adam(),
-                loss: 'binaryCrossentropy',  // Loss for multi-label classification
-                metrics: ['accuracy'],
-            });
-
-            const data = await fetchTrainingData();
-            const xs = tf.tensor4d(data.images);  // Make sure images are preprocessed to tensors
-            const ys = tf.tensor2d(data.labels);  // The labels should be in the form of label vectors
-
-            await model.fit(xs, ys, {
-                epochs: 20,
-                batchSize: 16,
-                validationSplit: 0.2,
-                callbacks: tf.callbacks.earlyStopping({ patience: 3 }),
-            });
-
-            console.log('Model training complete');
-            document.getElementById('output').innerText = 'Training complete!';
-            document.getElementById('downloadModelButton').style.display = 'block';  // Show the download button
-            modelJson = await model.toJSON();
-        }
-
-        async function initializeBackend() {
-            // Try using WebGL, fallback to WASM if WebGL is unavailable
-            try {
-                await tf.setBackend('webgl');
-                await tf.ready();
-                console.log('WebGL backend initialized');
-            } catch (error) {
-                console.error('WebGL initialization failed, falling back to WASM');
-                await tf.setBackend('wasm');
-                await tf.ready();
-                console.log('WASM backend initialized');
-            }
-        }
-
-        async function fetchTrainingData() {
-            // Fetch or prepare your training data
-            // Example data format:
-            // { images: [...], labels: [...] }
-            // In your case, you'd need to load your images and associate labels as the labelVector
-
-            const images = [];  // This should be your image data
-            const labels = [];  // This should be the corresponding labels in the form of the labelVector
-
-            // Example:
-            const item = { label: 3 };  // Example item with label 3 (index)
-            const labelVector = getLabelVector(item);
-            labels.push(labelVector);
-
-            // Push image tensor here (make sure your images are properly formatted as tensors)
-            // images.push(preprocessedImageTensor);
-
-            return { images, labels };
-        }
-
-        // Function to download the model as a JSON file
-        document.getElementById('downloadModelButton').addEventListener('click', function() {
-            const jsonBlob = new Blob([JSON.stringify(modelJson)], { type: 'application/json' });
-            const url = URL.createObjectURL(jsonBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'lego-classifier-model.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+        // Compile the model
+        model.compile({
+            optimizer: 'adam',
+            loss: 'binaryCrossentropy', // Loss for multi-label classification
+            metrics: ['accuracy']
         });
 
-        trainModel().catch(console.error);
+        // Choose a backend (WebGL is default, fall back to CPU or WASM)
+        async function setBackend() {
+            await tf.setBackend('webgl'); // You can try 'cpu' or 'wasm' if needed
+            console.log("Backend set to WebGL.");
+        }
+
+        // Train the model
+        async function trainModel() {
+            await setBackend(); // Ensure WebGL or the selected backend is set
+            await model.fit(imageTensor, labelTensor, {
+                epochs: 10,
+                batchSize: 2,
+                validationSplit: 0.2,
+                callbacks: tf.callbacks.earlyStopping({ patience: 3 })
+            });
+            console.log("Model training completed!");
+        }
+
+        // Start training
+        trainModel();
+
+        // Function to predict with the model
+        async function makePrediction(imageData) {
+            const prediction = model.predict(imageData);  // Predict using new image data
+            prediction.print();  // Display the predictions
+        }
+
+        // Example: Predicting with random new data
+        const randomNewImageData = new Array(height * width * channels).fill(0).map(() => Math.random());
+        const newImageTensor = tf.tensor4d([randomNewImageData], [1, height, width, channels]);  // New single image input
+        makePrediction(newImageTensor);
     </script>
 </body>
 </html>
