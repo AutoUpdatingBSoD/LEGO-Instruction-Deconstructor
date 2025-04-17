@@ -91,6 +91,8 @@
                 callbacks: tf.callbacks.earlyStopping({ patience: 3 })
             });
             console.log("Model training completed!");
+            await model.save('downloads://lego-classifier');
+
         }
 
         // Start training
