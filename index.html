@@ -64,7 +64,6 @@
 
     async function classifyPages(pages, model) {
       const outputDiv = document.getElementById("output");
-      outputDiv.innerHTML = '';
 
       for (let i = 0; i < pages.length; i++) {
         const tensor = preprocessImage(pages[i]);
@@ -86,6 +85,7 @@
       await setupTF();
       const model = await loadModel();
       const result = document.createElement('div');
+      const outputDiv = document.getElementById("output");
       result.innerHTML = `Model Successfully Loaded`;
       outputDiv.appendChild(result);
       const pages = await extractImagesFromPDF(file);
