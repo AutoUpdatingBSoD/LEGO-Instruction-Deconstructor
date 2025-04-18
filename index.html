@@ -1,130 +1,105 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>LEGO Multi-Label Classifier - Testing</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    canvas, img { max-width: 200px; margin: 5px; display: block; }
-    #output { margin-top: 20px; }
-  </style>
+    <title>LEGO Multi-Label Classifier - Training</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        canvas, img { max-width: 100px; margin: 5px; }
+    </style>
 </head>
 <body>
-<h1>Testing LEGO Classifier</h1>
-<input type="file" id="pdfInput" accept="application/pdf">
-<div id="output"></div>
+    <h1>Training LEGO Classifier (Multi-label)</h1>
+    <div id="status">Loading images and training...</div>
 
-<script>
-const categories = [
-    'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
-    'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-];
+    <script>
+    const categories = [
+        'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
+        'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+    ];
+    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
 
-const THRESHOLD = 0.5;
+    const imageDir = 'model/dataset';
 
-async function setupBackend() {
-    try {
-        await tf.setBackend('webgl');
-    } catch {
-        try {
-            await tf.setBackend('wasm');
-        } catch {
-            await tf.setBackend('cpu');
-        }
-    }
-    await tf.ready();
-}
-
-async function loadModel() {
-    return await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
-}
-
-function predictImage(model, imageTensor) {
-    const input = tf.tidy(() => imageTensor.expandDims(0).toFloat().div(255));
-    const prediction = model.predict(input);
-    const result = prediction.dataSync();
-    tf.dispose([input, prediction]);
-    return result;
-}
-
-async function extractImagesFromPDF(file) {
-    const loadingTask = pdfjsLib.getDocument(URL.createObjectURL(file));
-    const pdf = await loadingTask.promise;
-    const images = [];
-
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const context = canvas.getContext('2d');
-
-        await page.render({ canvasContext: context, viewport }).promise;
-
-        const fullImage = tf.browser.fromPixels(canvas);
-        const height = fullImage.shape[0];
-        const width = fullImage.shape[1];
-
-        const step = 256; // stride for moving window
-        const patchSize = 64;
-
-        for (let y = 0; y <= height - patchSize; y += step) {
-            for (let x = 0; x <= width - patchSize; x += step) {
-                const patch = tf.tidy(() => fullImage.slice([y, x, 0], [patchSize, patchSize, 3]));
-                images.push({ tensor: patch, page: pageNum, x, y });
-            }
-        }
-        tf.dispose(fullImage);
-    }
-
-    return images;
-}
-
-function displayResults(results) {
-    const output = document.getElementById('output');
-    output.innerHTML = '';
-
-    results.forEach(({ page, x, y, labels }) => {
-        const div = document.createElement('div');
-        div.innerText = `Page ${page} | (${x}, ${y}) → ${labels.join(', ')}`;
-        output.appendChild(div);
-    });
-}
-
-async function handlePDF(file) {
-    const model = await loadModel();
-    const imagePatches = await extractImagesFromPDF(file);
-    const results = [];
-
-    for (const { tensor, page, x, y } of imagePatches) {
-        const resized = tf.image.resizeBilinear(tensor, [64, 64]);
-        const predictions = predictImage(model, resized);
+    async function loadImagesAndLabels() {
+        const images = [];
         const labels = [];
 
-        predictions.forEach((p, i) => {
-            if (p > THRESHOLD) labels.push(categories[i]);
-        });
+        for (let label = 0; label < categories.length; label++) {
+            for (let i = 1; i <= indices[label]; i++) {
+                const imgPath = `${imageDir}/${categories[label]}/${categories[label]} ${i}.png`;
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = imgPath;
+                await new Promise(resolve => img.onload = resolve);
 
-        if (labels.length) {
-            results.push({ page, x, y, labels });
+                const tensor = tf.tidy(() => {
+                    return tf.browser.fromPixels(img)
+                        .resizeNearestNeighbor([64, 64])
+                        .toFloat()
+                        .div(255.0);
+                });
+                images.push(tensor);
+
+                const labelVector = new Array(categories.length).fill(0);
+                switch (label) {
+                    case 0: labelVector[0] = 1; break;
+                    case 1: labelVector[1] = 1; break;
+                    case 2: labelVector[2] = 1; labelVector[4] = 1; break;
+                    case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+                    case 4: labelVector[4] = 1; break;
+                    case 5: labelVector[5] = 1; labelVector[7] = 1; break;
+                    case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+                    case 7: labelVector[7] = 1; break;
+                    case 8: labelVector[4] = 1; labelVector[8] = 1; break;
+                    case 9: labelVector[1] = 1; labelVector[9] = 1; break;
+                }
+
+                labels.push(tf.tensor1d(labelVector));
+            }
         }
 
-        tf.dispose([tensor, resized]);
+        return {
+            xs: tf.stack(images),
+            ys: tf.stack(labels)
+        };
     }
 
-    model.dispose();
-    displayResults(results);
-}
+    async function startTraining() {
+        await tf.setBackend('webgl').catch(async () => {
+            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+        });
+        await tf.ready();
 
-document.getElementById('pdfInput').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        document.getElementById('output').innerText = 'Processing PDF...';
-        setupBackend().then(() => handlePDF(file));
+        const { xs, ys } = await loadImagesAndLabels();
+
+        const model = tf.sequential();
+        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 64, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.flatten());
+        model.add(tf.layers.dense({ units: 512, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
+
+        model.compile({
+            optimizer: tf.train.adam(1e-4),
+            loss: 'binaryCrossentropy',
+            metrics: ['accuracy']
+        });
+
+        await model.fit(xs, ys, {
+            epochs: 50,
+            batchSize: 8,
+            validationSplit: 0.2
+        });
+
+        await model.save('downloads://lego-classifier');
+        document.getElementById('status').innerText = "Training complete and model saved.";
     }
-});
-</script>
+
+    startTraining();
+    </script>
 </body>
 </html>
