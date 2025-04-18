@@ -74,16 +74,28 @@
         const { xs, ys } = await loadImagesAndLabels();
 
         const model = tf.sequential();
-        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 16, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 64, kernelSize: 3, activation: 'relu', padding: 'same' }));
+        model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu', padding: 'same' }));
         model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-        model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.dropout({ rate: 0.25 }));
+
+        model.add(tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: 'relu', padding: 'same' }));
+        model.add(tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: 'relu', padding: 'same' }));
         model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.dropout({ rate: 0.25 }));
+
+        model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu', padding: 'same' }));
+        model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu', padding: 'same' }));
+        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.dropout({ rate: 0.25 }));
+
         model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: 1024, activation: 'relu' }));
+        model.add(tf.layers.dropout({ rate: 0.5 }));
         model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 
         model.compile({
-            optimizer: tf.train.adam(0.001),
+            optimizer: tf.train.adam(1e-4),
             loss: 'binaryCrossentropy',
             metrics: ['accuracy']
         });
@@ -91,7 +103,7 @@
         await model.fit(xs, ys, {
             epochs: 100,
             batchSize: 4,
-            validationSplit: 0.1
+            validationSplit: 0.2
         });
 
         await model.save('downloads://lego-classifier');
