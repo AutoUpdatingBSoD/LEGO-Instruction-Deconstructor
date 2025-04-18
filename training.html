@@ -42,16 +42,18 @@
                 images.push(tensor);
 
                 const labelVector = new Array(categories.length).fill(0);
-                if (label === 0) labelVector[0] = 1;
-                if (label === 1) labelVector[1] = 1;
-                if (label === 2) { labelVector[2] = 1; labelVector[4] = 1; }
-                if (label === 3) { labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; }
-                if (label === 4) labelVector[4] = 1;
-                if (label === 5) { labelVector[5] = 1; labelVector[7] = 1; }
-                if (label === 6) { labelVector[6] = 1; labelVector[7] = 1; }
-                if (label === 7) labelVector[7] = 1;
-                if (label === 8) { labelVector[4] = 1; labelVector[8] = 1; }
-                if (label === 9) { labelVector[1] = 1; labelVector[9] = 1; }
+                switch (label) {
+                    case 0: labelVector[0] = 1; break;
+                    case 1: labelVector[1] = 1; break;
+                    case 2: labelVector[2] = 1; labelVector[4] = 1; break;
+                    case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+                    case 4: labelVector[4] = 1; break;
+                    case 5: labelVector[5] = 1; labelVector[7] = 1; break;
+                    case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+                    case 7: labelVector[7] = 1; break;
+                    case 8: labelVector[4] = 1; labelVector[8] = 1; break;
+                    case 9: labelVector[1] = 1; labelVector[9] = 1; break;
+                }
 
                 labels.push(tf.tensor1d(labelVector));
             }
@@ -64,21 +66,24 @@
     }
 
     async function startTraining() {
+        await tf.setBackend('webgl').catch(async () => {
+            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+        });
         await tf.ready();
 
         const { xs, ys } = await loadImagesAndLabels();
 
         const model = tf.sequential();
-        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 16, kernelSize: 3, activation: 'relu' }));
         model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-        model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu' }));
         model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
         model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ units: 256, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
         model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 
         model.compile({
-            optimizer: tf.train.adam(1e-4),
+            optimizer: tf.train.adam(0.001),
             loss: 'binaryCrossentropy',
             metrics: ['accuracy']
         });
@@ -86,12 +91,7 @@
         await model.fit(xs, ys, {
             epochs: 100,
             batchSize: 4,
-            validationSplit: 0.2,
-            callbacks: {
-                onEpochEnd: (epoch, logs) => {
-                    console.log(`Epoch ${epoch + 1}: loss=${logs.loss}, val_loss=${logs.val_loss}`);
-                }
-            }
+            validationSplit: 0.1
         });
 
         await model.save('downloads://lego-classifier');
