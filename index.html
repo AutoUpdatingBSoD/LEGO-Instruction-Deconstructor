@@ -27,6 +27,7 @@ async function loadModel() {
   });
   await tf.ready();
   model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
+  console.log("loaded model.");
 }
 
 async function processPDF() {
