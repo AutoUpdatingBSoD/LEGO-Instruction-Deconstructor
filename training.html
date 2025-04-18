@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>LEGO Multi-Label Classifier - Training (High Accuracy)</title>
+  <title>LEGO Multi-Label Classifier - Training (Accurate Predictions)</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; }
   </style>
 </head>
 <body>
-  <h1>Training LEGO Classifier (Max Accuracy)</h1>
+  <h1>Training LEGO Classifier (Prediction-Focused)</h1>
   <div id="status">Initializing...</div>
 
   <script>
@@ -37,7 +37,7 @@
 
           const tensor = tf.tidy(() =>
             tf.browser.fromPixels(img)
-              .resizeBilinear([64, 64]) // Force consistent dimensions
+              .resizeBilinear([64, 64]) // Consistent dimensions
               .toFloat()
               .div(255.0)
           );
@@ -69,50 +69,4 @@
     }
 
     async function startTraining() {
-      document.getElementById("status").innerText = "Loading backend...";
-      await tf.setBackend('webgl').catch(async () => {
-        await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
-      });
-      await tf.ready();
-
-      document.getElementById("status").innerText = "Loading images...";
-      const { xs, ys } = await loadImagesAndLabels();
-
-      const model = tf.sequential();
-      model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 64, kernelSize: 3, activation: 'relu' }));
-      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-      model.add(tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: 'relu' }));
-      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-      model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu' }));
-      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-      model.add(tf.layers.flatten());
-      model.add(tf.layers.dense({ units: 1024, activation: 'relu' }));
-      model.add(tf.layers.dropout({ rate: 0.5 }));
-      model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
-
-      model.compile({
-        optimizer: tf.train.adam(1e-4),
-        loss: 'binaryCrossentropy',
-        metrics: ['accuracy']
-      });
-
-      document.getElementById("status").innerText = "Training model...";
-      await model.fit(xs, ys, {
-        epochs: 100,
-        batchSize: 4,
-        validationSplit: 0.2
-      });
-
-      document.getElementById("status").innerText = "Saving model...";
-      await model.save('downloads://lego-classifier');
-
-      document.getElementById("status").innerText = "Training complete. Model saved!";
-    }
-
-    startTraining().catch(err => {
-      console.error(err);
-      document.getElementById("status").innerText = "Error: " + err.message;
-    });
-  </script>
-</body>
-</html>
+      document.getElementBy
