@@ -1,105 +1,110 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LEGO Multi-Label Classifier - Training</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        canvas, img { max-width: 100px; margin: 5px; }
-    </style>
+    <title>LEGO Multi-label Classifier - Testing</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 </head>
 <body>
-    <h1>Training LEGO Classifier (Multi-label)</h1>
-    <div id="status">Loading images and training...</div>
+    <h1>LEGO Classifier - Test PDF</h1>
+    <input type="file" id="pdfUpload" accept=".pdf" />
+    <div id="results"></div>
 
     <script>
-    const categories = [
-        'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
-        'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-    ];
-    const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
+        const categories = [
+            'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
+            'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+        ];
 
-    const imageDir = 'model/dataset';
+        let model;
 
-    async function loadImagesAndLabels() {
-        const images = [];
-        const labels = [];
-
-        for (let label = 0; label < categories.length; label++) {
-            for (let i = 1; i <= indices[label]; i++) {
-                const imgPath = `${imageDir}/${categories[label]}/${categories[label]} ${i}.png`;
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.src = imgPath;
-                await new Promise(resolve => img.onload = resolve);
-
-                const tensor = tf.tidy(() => {
-                    return tf.browser.fromPixels(img)
-                        .resizeNearestNeighbor([64, 64])
-                        .toFloat()
-                        .div(255.0);
-                });
-                images.push(tensor);
-
-                const labelVector = new Array(categories.length).fill(0);
-                switch (label) {
-                    case 0: labelVector[0] = 1; break;
-                    case 1: labelVector[1] = 1; break;
-                    case 2: labelVector[2] = 1; labelVector[4] = 1; break;
-                    case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
-                    case 4: labelVector[4] = 1; break;
-                    case 5: labelVector[5] = 1; labelVector[7] = 1; break;
-                    case 6: labelVector[6] = 1; labelVector[7] = 1; break;
-                    case 7: labelVector[7] = 1; break;
-                    case 8: labelVector[4] = 1; labelVector[8] = 1; break;
-                    case 9: labelVector[1] = 1; labelVector[9] = 1; break;
+        async function loadModel() {
+            try {
+                await tf.setBackend('webgl');
+            } catch {
+                try {
+                    await tf.setBackend('wasm');
+                } catch {
+                    await tf.setBackend('cpu');
                 }
-
-                labels.push(tf.tensor1d(labelVector));
             }
+            await tf.ready();
+            model = await tf.loadLayersModel('model/modelfiles/model.json');
+            console.log('Model loaded.');
         }
 
-        return {
-            xs: tf.stack(images),
-            ys: tf.stack(labels)
-        };
-    }
+        async function pdfToImages(pdfData) {
+            const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+            const pages = [];
 
-    async function startTraining() {
-        await tf.setBackend('webgl').catch(async () => {
-            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                await page.render({ canvasContext: context, viewport }).promise;
+
+                const imageData = canvas.toDataURL('image/png');
+                pages.push(imageData);
+            }
+
+            return pages;
+        }
+
+        async function classifyImage(imgDataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = async () => {
+                    const tensor = tf.browser.fromPixels(img)
+                        .resizeNearestNeighbor([64, 64])
+                        .toFloat()
+                        .div(255.0)
+                        .expandDims();
+                    const prediction = await model.predict(tensor).data();
+                    resolve(prediction);
+                };
+                img.src = imgDataUrl;
+            });
+        }
+
+        function renderResults(predictions, index) {
+            const resultDiv = document.getElementById('results');
+            const filtered = predictions
+                .map((p, i) => ({ label: categories[i], value: p }))
+                .filter(p => p.value > 0.5)
+                .sort((a, b) => b.value - a.value);
+            const html = `
+                <h3>Page ${index + 1}</h3>
+                ${filtered.length
+                    ? filtered.map(p => `<p>${p.label}: ${p.value.toFixed(2)}</p>`).join('')
+                    : '<p>No confident prediction.</p>'
+                }
+                <hr/>
+            `;
+            resultDiv.innerHTML += html;
+        }
+
+        document.getElementById('pdfUpload').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const arrayBuffer = await file.arrayBuffer();
+            const images = await pdfToImages(arrayBuffer);
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Processing...</p>';
+
+            for (let i = 0; i < images.length; i++) {
+                const predictions = await classifyImage(images[i]);
+                renderResults(predictions, i);
+            }
         });
-        await tf.ready();
 
-        const { xs, ys } = await loadImagesAndLabels();
-
-        const model = tf.sequential();
-        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 64, kernelSize: 3, activation: 'relu' }));
-        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-        model.add(tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: 'relu' }));
-        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-        model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu' }));
-        model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ units: 512, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
-
-        model.compile({
-            optimizer: tf.train.adam(1e-4),
-            loss: 'binaryCrossentropy',
-            metrics: ['accuracy']
-        });
-
-        await model.fit(xs, ys, {
-            epochs: 50,
-            batchSize: 8,
-            validationSplit: 0.2
-        });
-
-        await model.save('downloads://lego-classifier');
-        document.getElementById('status').innerText = "Training complete and model saved.";
-    }
-
-    startTraining();
+        loadModel();
     </script>
 </body>
 </html>
