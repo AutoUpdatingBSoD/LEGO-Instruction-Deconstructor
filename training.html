@@ -33,10 +33,12 @@
                 img.src = imgPath;
                 await new Promise(resolve => img.onload = resolve);
 
-                const tensor = tf.browser.fromPixels(img)
-                    .resizeNearestNeighbor([64, 64])
-                    .toFloat()
-                    .div(255.0);
+                const tensor = tf.tidy(() => {
+                    return tf.browser.fromPixels(img)
+                        .resizeNearestNeighbor([64, 64])
+                        .toFloat()
+                        .div(255.0);
+                });
                 images.push(tensor);
 
                 const labelVector = new Array(categories.length).fill(0);
@@ -65,7 +67,7 @@
 
     async function startTraining() {
         await tf.setBackend('webgl').catch(async () => {
-          await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
         });
         await tf.ready();
 
@@ -78,7 +80,7 @@
         model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
         model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu' }));
         model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ units: 256, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: 512, activation: 'relu' }));
         model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
 
         model.compile({
@@ -94,7 +96,6 @@
         });
 
         await model.save('downloads://lego-classifier');
-
         document.getElementById('status').innerText = "Training complete and model saved.";
     }
 
