@@ -18,7 +18,6 @@
     ];
     const indices = [5, 2, 2, 4, 4, 26, 18, 4, 2, 6];
     const imageDir = 'model/dataset';
-
     async function loadImagesAndLabels() {
       const images = [];
       const labels = [];
@@ -69,4 +68,48 @@
     }
 
     async function startTraining() {
-      document.getElementBy
+      document.getElementById("status").innerText = "Loading backend...";
+      await tf.setBackend('webgl').catch(async () => {
+        await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+      });
+      await tf.ready();
+
+      document.getElementById("status").innerText = "Loading images...";
+      const { xs, ys } = await loadImagesAndLabels();
+
+      const model = tf.sequential();
+      model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 64, kernelSize: 3, activation: 'relu' }));
+      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+      model.add(tf.layers.conv2d({ filters: 128, kernelSize: 3, activation: 'relu' }));
+      model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+      model.add(tf.layers.conv2d({ filters: 256, kernelSize: 3, activation: 'relu' }));
+      model.add(tf.layers.flatten());
+      model.add(tf.layers.dense({ units: 512, activation: 'relu' }));
+      model.add(tf.layers.dense({ units: categories.length, activation: 'sigmoid' }));
+
+      model.compile({
+        optimizer: tf.train.adam(1e-4),
+        loss: 'binaryCrossentropy',
+        metrics: ['accuracy']
+      });
+
+      document.getElementById("status").innerText = "Training model...";
+      await model.fit(xs, ys, {
+        epochs: 30,
+        batchSize: 8,
+        validationSplit: 0.2
+      });
+
+      document.getElementById("status").innerText = "Saving model...";
+      await model.save('downloads://lego-classifier');
+
+      document.getElementById("status").innerText = "Training complete. Model saved!";
+    }
+
+    startTraining().catch(err => {
+      console.error(err);
+      document.getElementById("status").innerText = "Error: " + err.message;
+    });
+  </script>
+</body>
+</html>
