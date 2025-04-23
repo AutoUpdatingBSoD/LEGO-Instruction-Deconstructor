@@ -27,7 +27,7 @@
             await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
         });
         await tf.ready();
-        return await tf.loadLayersModel('model/modelfiles/model.json');
+        return await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
     }
 
     async function processWholePage(model, canvas, pageNum) {
