@@ -10,9 +10,10 @@
 </head>
 <body>
     <h1>Testing LEGO Classifier</h1>
-    <input type="file" id="imageUpload" accept="image/*">
+    <input type="file" id="pdfUpload" accept="application/pdf">
     <div id="predictions"></div>
 
+    <script src="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
     <script>
     const categories = [
         'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
@@ -24,10 +25,27 @@
             await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
         });
         await tf.ready();
-        return await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
+        return await tf.loadLayersModel('model/modelfiles/model.json');
     }
 
-    async function predictImage(model, imgElement) {
+    async function processPageImages(model, pdf, pageNum) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: context, viewport }).promise;
+
+        const img = new Image();
+        img.src = canvas.toDataURL();
+        await new Promise(resolve => img.onload = resolve);
+
+        await predictImage(model, img, pageNum);
+    }
+
+    async function predictImage(model, imgElement, pageNum) {
         const tensor = tf.browser.fromPixels(imgElement)
             .resizeNearestNeighbor([64, 64])
             .toFloat()
@@ -42,19 +60,24 @@
             .filter(r => r.confidence > 0.5);
 
         const output = document.getElementById('predictions');
-        output.innerHTML = results.length ?
-            results.map(r => `<div>${r.label}: ${(r.confidence * 100).toFixed(1)}%</div>`).join('') :
-            '<div>No confident predictions</div>';
+        const resultHTML = `<h3>Page ${pageNum}</h3>` +
+            (results.length ?
+                results.map(r => `<div>${r.label}: ${(r.confidence * 100).toFixed(1)}%</div>`).join('') :
+                '<div>No confident predictions</div>');
+        output.innerHTML += resultHTML;
     }
 
-    document.getElementById('imageUpload').addEventListener('change', async event => {
-        const model = await loadModel();
+    document.getElementById('pdfUpload').addEventListener('change', async event => {
         const file = event.target.files[0];
         if (!file) return;
 
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
-        img.onload = () => predictImage(model, img);
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const model = await loadModel();
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            await processPageImages(model, pdf, i);
+        }
     });
     </script>
 </body>
