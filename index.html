@@ -31,11 +31,25 @@
     }
 
     async function processWholePage(model, canvas, pageNum) {
-        const img = new Image();
-        img.src = canvas.toDataURL();
-        await new Promise(resolve => img.onload = resolve);
+        const tileSize = 128;
+        const step = tileSize; // no overlap for now
+        const context = canvas.getContext('2d');
 
-        await predictImage(model, img, pageNum);
+        for (let y = 0; y <= canvas.height - tileSize; y += step) {
+            for (let x = 0; x <= canvas.width - tileSize; x += step) {
+                const tileCanvas = document.createElement('canvas');
+                tileCanvas.width = tileSize;
+                tileCanvas.height = tileSize;
+                const tileContext = tileCanvas.getContext('2d');
+                tileContext.drawImage(canvas, x, y, tileSize, tileSize, 0, 0, tileSize, tileSize);
+
+                const img = new Image();
+                img.src = tileCanvas.toDataURL();
+                await new Promise(resolve => img.onload = resolve);
+
+                await predictImage(model, img, pageNum);
+            }
+        }
     }
 
     async function processPDF(model, pdf) {
