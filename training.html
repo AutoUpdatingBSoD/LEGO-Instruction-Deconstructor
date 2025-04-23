@@ -13,22 +13,23 @@
     <div id="status"></div>
 
     <script>
-    const pageCategories = ['index', 'finish'];
+    const pageCategories = ['finish', 'index'];
     const sectionCategories = [
         'bagset', 'dontreadrepeat', 'pageno', 'part',
         'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
-    const categories = [...pageCategories, ...sectionCategories];
+    const imageDir = 'model/dataset';
 
-    const indices = [2, 4, 5, 2, 4, 26, 18, 4, 2, 6];
+    const pageIndices = [2, 4];
+    const sectionIndices = [5, 2, 4, 26, 18, 4, 2, 6];
 
     function getLabelVector(categoryIndex) {
         const labelVector = new Array(10).fill(0);
         switch (categoryIndex) {
-            case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; break;
-            case 2: labelVector[2] = 1; labelVector[4] = 1; break;
-            case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+            case 0: labelVector[2] = 1; labelVector[4] = 1; break;
+            case 1: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+            case 2: labelVector[0] = 1; break;
+            case 3: labelVector[1] = 1; break;
             case 4: labelVector[4] = 1; break;
             case 5: labelVector[5] = 1; labelVector[7] = 1; break;
             case 6: labelVector[6] = 1; labelVector[7] = 1; break;
@@ -39,37 +40,30 @@
         return labelVector;
     }
 
-    async function loadAndTrain() {
-        const status = document.getElementById('status');
-        status.innerText = 'Loading images...';
-
-        const imageDir = 'model/dataset';
+    async function loadImages(categories, indices, ith) {
         const images = [];
         const labels = [];
-
-        for (let label = 0; label < categories.length; label++) {
+        
+        for (let label = ith; label < categories.length; label++) {
             for (let i = 0; i < indices[label]; i++) {
                 const imgPath = `${imageDir}/${categories[label]}/${categories[label]} ${i}.png`;
                 const img = new Image();
                 img.src = imgPath;
+                await new Promise((resolve) => { img.onload = resolve; });
 
-                await new Promise((resolve) => {
-                    img.onload = () => {
-                        const tensor = tf.browser.fromPixels(img)
-                            .resizeNearestNeighbor([64, 64])
-                            .toFloat()
-                            .div(255.0);
-                        images.push(tensor);
-                        labels.push(getLabelVector(label));
-                        resolve();
-                    };
-                });
+                const tensor = tf.browser.fromPixels(img)
+                    .resizeNearestNeighbor([64, 64])
+                    .toFloat()
+                    .div(255.0);
+                images.push(tensor);
+                labels.push(getLabelVector(label));
             }
         }
 
-        const xs = tf.stack(images);
-        const ys = tf.tensor2d(labels);
+        return { xs: tf.stack(images), ys: tf.tensor2d(labels) };
+    }
 
+    async function trainModel(name, xs, ys) {
         const model = tf.sequential();
         model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
         model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
@@ -84,16 +78,22 @@
             batchSize: 16,
             callbacks: {
                 onEpochEnd: (epoch, logs) => {
-                    status.innerText = `Epoch ${epoch + 1}: loss=${logs.loss.toFixed(4)}, acc=${logs.acc.toFixed(4)}`;
+                    document.getElementById('status').innerText = `${name} - Epoch ${epoch + 1}: loss=${logs.loss.toFixed(4)}, acc=${logs.acc.toFixed(4)}`;
                 }
             }
         });
 
-        await model.save('downloads://lego-model');
-        status.innerText += '\nModel saved successfully!';
+        await model.save(`downloads://${name}-model`);
+        document.getElementById('status').innerText += `\n${name} model saved successfully!`;
     }
 
-    window.onload = loadAndTrain;
+    (async () => {
+        const pageData = await loadImages(pageCategories, pageIndices, 0);
+        await trainModel('page', pageData.xs, pageData.ys);
+
+        const sectionData = await loadImages(sectionCategories, sectionIndices, 2);
+        await trainModel('section', sectionData.xs, sectionData.ys);
+    })();
     </script>
 </body>
 </html>
