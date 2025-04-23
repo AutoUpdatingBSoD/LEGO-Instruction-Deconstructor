@@ -1,88 +1,99 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LEGO Classifier - Training</title>
+    <title>LEGO Multi-Label Classifier - Training</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
         canvas, img { max-width: 100px; margin: 5px; }
-        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <h1>LEGO Classifier Training</h1>
-    <select id="modeSelect">
-        <option value="page">Train Page Type Model</option>
-        <option value="section">Train Section Type Model</option>
-    </select>
-
-    <div id="trainer">
-        <input type="file" id="imageUpload" webkitdirectory directory multiple>
-        <button id="startTraining">Start Training</button>
-        <div id="status"></div>
-    </div>
+    <h1>Training LEGO Classifier</h1>
+    <div id="status"></div>
 
     <script>
-    const pageCategories = ['finish', 'index'];
-    const sectionCategories = ['part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
+    const pageCategories = ['index', 'finish'];
+    const sectionCategories = [
+        'bagset', 'dontreadrepeat', 'pageno', 'part',
+        'partstep', 'repeat', 'splitdecision', 'subbuild'
+    ];
+    const categories = [...pageCategories, ...sectionCategories];
 
-    document.getElementById('startTraining').addEventListener('click', async () => {
-        const mode = document.getElementById('modeSelect').value;
-        const files = document.getElementById('imageUpload').files;
-        if (!files.length) return alert('Please upload images.');
+    const indices = [2, 4, 5, 2, 4, 26, 18, 4, 2, 6];
 
-        const labels = [], images = [];
-        for (let file of files) {
-            const label = file.webkitRelativePath.split('/')[1];
-            const categoryList = mode === 'page' ? pageCategories : sectionCategories;
-            const index = categoryList.indexOf(label);
-            if (index === -1) continue;
+    function getLabelVector(categoryIndex) {
+        const labelVector = new Array(10).fill(0);
+        switch (categoryIndex) {
+            case 0: labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; break;
+            case 2: labelVector[2] = 1; labelVector[4] = 1; break;
+            case 3: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+            case 4: labelVector[4] = 1; break;
+            case 5: labelVector[5] = 1; labelVector[7] = 1; break;
+            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+            case 7: labelVector[7] = 1; break;
+            case 8: labelVector[4] = 1; labelVector[8] = 1; break;
+            case 9: labelVector[1] = 1; labelVector[9] = 1; break;
+        }
+        return labelVector;
+    }
 
-            const img = await loadImage(file);
-            const tensor = tf.browser.fromPixels(img)
-                .resizeNearestNeighbor([64, 64])
-                .toFloat()
-                .div(255.0)
-                .expandDims();
-            images.push(tensor);
-            labels.push(index);
+    async function loadAndTrain() {
+        const status = document.getElementById('status');
+        status.innerText = 'Loading images...';
+
+        const imageDir = 'model/dataset';
+        const images = [];
+        const labels = [];
+
+        for (let label = 0; label < categories.length; label++) {
+            for (let i = 0; i < indices[label]; i++) {
+                const imgPath = `${imageDir}/${categories[label]}/${categories[label]} ${i}.png`;
+                const img = new Image();
+                img.src = imgPath;
+
+                await new Promise((resolve) => {
+                    img.onload = () => {
+                        const tensor = tf.browser.fromPixels(img)
+                            .resizeNearestNeighbor([64, 64])
+                            .toFloat()
+                            .div(255.0);
+                        images.push(tensor);
+                        labels.push(getLabelVector(label));
+                        resolve();
+                    };
+                });
+            }
         }
 
-        const xs = tf.concat(images);
-        const ys = tf.oneHot(tf.tensor1d(labels, 'int32'), mode === 'page' ? pageCategories.length : sectionCategories.length);
+        const xs = tf.stack(images);
+        const ys = tf.tensor2d(labels);
 
         const model = tf.sequential();
-        model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
-        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         model.add(tf.layers.flatten());
         model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: (mode === 'page' ? pageCategories.length : sectionCategories.length), activation: 'softmax' }));
+        model.add(tf.layers.dense({ units: 10, activation: 'sigmoid' }));
 
-        model.compile({ loss: 'categoricalCrossentropy', optimizer: 'adam', metrics: ['accuracy'] });
+        model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
-        document.getElementById('status').innerText = 'Training...';
         await model.fit(xs, ys, {
-            epochs: 10,
-            batchSize: 32,
+            epochs: 15,
+            batchSize: 16,
             callbacks: {
                 onEpochEnd: (epoch, logs) => {
-                    document.getElementById('status').innerText = `Epoch ${epoch + 1}: Accuracy = ${logs.acc.toFixed(2)}`;
+                    status.innerText = `Epoch ${epoch + 1}: loss=${logs.loss.toFixed(4)}, acc=${logs.acc.toFixed(4)}`;
                 }
             }
         });
 
-        const path = mode === 'page' ? 'model/page_type' : 'model/section_type';
-        await model.save(`downloads://${path}`);
-        document.getElementById('status').innerText = `Model saved to ${path}`;
-    });
-
-    function loadImage(file) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.src = URL.createObjectURL(file);
-        });
+        await model.save('downloads://lego-model');
+        status.innerText += '\nModel saved successfully!';
     }
+
+    window.onload = loadAndTrain;
     </script>
 </body>
 </html>
