@@ -30,46 +30,34 @@
         return await tf.loadLayersModel('model/modelfiles/model.json');
     }
 
-    async function processPageImages(model, pdf, pageNum) {
-        const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+    async function processWholePage(model, canvas, pageNum) {
+        const img = new Image();
+        img.src = canvas.toDataURL();
+        await new Promise(resolve => img.onload = resolve);
 
-        await page.render({ canvasContext: context, viewport }).promise;
-
-        const sections = 4;
-        const sectionWidth = canvas.width / 2;
-        const sectionHeight = canvas.height / 2;
-
-        for (let row = 0; row < 2; row++) {
-            for (let col = 0; col < 2; col++) {
-                const subCanvas = document.createElement('canvas');
-                subCanvas.width = sectionWidth;
-                subCanvas.height = sectionHeight;
-                const subCtx = subCanvas.getContext('2d');
-                subCtx.drawImage(
-                    canvas,
-                    col * sectionWidth,
-                    row * sectionHeight,
-                    sectionWidth,
-                    sectionHeight,
-                    0,
-                    0,
-                    sectionWidth,
-                    sectionHeight
-                );
-                const img = new Image();
-                img.src = subCanvas.toDataURL();
-                await new Promise(resolve => img.onload = resolve);
-                await predictImage(model, img, pageNum, row, col);
-            }
-        }
+        await predictImage(model, img, pageNum);
     }
 
-    async function predictImage(model, imgElement, pageNum, row, col) {
+    async function processPDF(model, pdf) {
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            await page.render({ canvasContext: context, viewport }).promise;
+
+            await processWholePage(model, canvas, i);
+        }
+
+        const countSummary = categories.map((label, index) =>
+            `<div>${label}: ${categoryCounts[index]} detections</div>`).join('');
+        document.getElementById('predictions').innerHTML += '<h2>Summary</h2>' + countSummary;
+    }
+
+    async function predictImage(model, imgElement, pageNum) {
         const tensor = tf.browser.fromPixels(imgElement)
             .resizeNearestNeighbor([64, 64])
             .toFloat()
@@ -89,7 +77,7 @@
         });
 
         const output = document.getElementById('predictions');
-        const resultHTML = `<h3>Page ${pageNum} [${row},${col}]</h3>` +
+        const resultHTML = `<h3>Page ${pageNum}</h3>` +
             (results.length ?
                 results.map(r => `<div>${r.label}: ${(r.confidence * 100).toFixed(1)}%</div>`).join('') :
                 '<div>No confident predictions</div>');
@@ -104,13 +92,7 @@
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const model = await loadModel();
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-            await processPageImages(model, pdf, i);
-        }
-
-        const countSummary = categories.map((label, index) =>
-            `<div>${label}: ${categoryCounts[index]} detections</div>`).join('');
-        document.getElementById('predictions').innerHTML += '<h2>Summary</h2>' + countSummary;
+        await processPDF(model, pdf);
     });
     </script>
 </body>
