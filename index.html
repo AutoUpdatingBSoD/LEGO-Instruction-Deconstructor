@@ -1,113 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LEGO Multi-Label Classifier - Testing</title>
+    <title>LEGO Classifier - Training</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
         canvas, img { max-width: 100px; margin: 5px; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <h1>Testing LEGO Classifier</h1>
-    <input type="file" id="pdfUpload" accept="application/pdf">
-    <div id="predictions"></div>
+    <h1>LEGO Classifier Training</h1>
+    <select id="modeSelect">
+        <option value="page">Train Page Type Model</option>
+        <option value="section">Train Section Type Model</option>
+    </select>
 
-    <script src="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
+    <div id="trainer">
+        <input type="file" id="imageUpload" webkitdirectory directory multiple>
+        <button id="startTraining">Start Training</button>
+        <div id="status"></div>
+    </div>
+
     <script>
-    const categories = [
-        'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
-        'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-    ];
+    const pageCategories = ['finish', 'index'];
+    const sectionCategories = ['part', 'partstep', 'repeat', 'splitdecision', 'subbuild'];
 
-    const categoryCounts = new Array(categories.length).fill(0);
+    document.getElementById('startTraining').addEventListener('click', async () => {
+        const mode = document.getElementById('modeSelect').value;
+        const files = document.getElementById('imageUpload').files;
+        if (!files.length) return alert('Please upload images.');
 
-    async function loadModel() {
-        await tf.setBackend('webgl').catch(async () => {
-            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
-        });
-        await tf.ready();
-        return await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
-    }
+        const labels = [], images = [];
+        for (let file of files) {
+            const label = file.webkitRelativePath.split('/')[1];
+            const categoryList = mode === 'page' ? pageCategories : sectionCategories;
+            const index = categoryList.indexOf(label);
+            if (index === -1) continue;
 
-    async function processWholePage(model, canvas, pageNum) {
-        const tileSize = 128;
-        const step = tileSize; // no overlap for now
-        const context = canvas.getContext('2d');
+            const img = await loadImage(file);
+            const tensor = tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([64, 64])
+                .toFloat()
+                .div(255.0)
+                .expandDims();
+            images.push(tensor);
+            labels.push(index);
+        }
 
-        for (let y = 0; y <= canvas.height - tileSize; y += step) {
-            for (let x = 0; x <= canvas.width - tileSize; x += step) {
-                const tileCanvas = document.createElement('canvas');
-                tileCanvas.width = tileSize;
-                tileCanvas.height = tileSize;
-                const tileContext = tileCanvas.getContext('2d');
-                tileContext.drawImage(canvas, x, y, tileSize, tileSize, 0, 0, tileSize, tileSize);
+        const xs = tf.concat(images);
+        const ys = tf.oneHot(tf.tensor1d(labels, 'int32'), mode === 'page' ? pageCategories.length : sectionCategories.length);
 
-                const img = new Image();
-                img.src = tileCanvas.toDataURL();
-                await new Promise(resolve => img.onload = resolve);
+        const model = tf.sequential();
+        model.add(tf.layers.conv2d({ filters: 32, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
+        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.flatten());
+        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: (mode === 'page' ? pageCategories.length : sectionCategories.length), activation: 'softmax' }));
 
-                await predictImage(model, img, pageNum);
+        model.compile({ loss: 'categoricalCrossentropy', optimizer: 'adam', metrics: ['accuracy'] });
+
+        document.getElementById('status').innerText = 'Training...';
+        await model.fit(xs, ys, {
+            epochs: 10,
+            batchSize: 32,
+            callbacks: {
+                onEpochEnd: (epoch, logs) => {
+                    document.getElementById('status').innerText = `Epoch ${epoch + 1}: Accuracy = ${logs.acc.toFixed(2)}`;
+                }
             }
-        }
-    }
-
-    async function processPDF(model, pdf) {
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-
-            await page.render({ canvasContext: context, viewport }).promise;
-
-            await processWholePage(model, canvas, i);
-        }
-
-        const countSummary = categories.map((label, index) =>
-            `<div>${label}: ${categoryCounts[index]} detections</div>`).join('');
-        document.getElementById('predictions').innerHTML += '<h2>Summary</h2>' + countSummary;
-    }
-
-    async function predictImage(model, imgElement, pageNum) {
-        const tensor = tf.browser.fromPixels(imgElement)
-            .resizeNearestNeighbor([64, 64])
-            .toFloat()
-            .div(255.0)
-            .expandDims();
-
-        const prediction = model.predict(tensor);
-        const values = await prediction.data();
-
-        const results = Array.from(values)
-            .map((v, i) => ({ label: categories[i], confidence: v }))
-            .filter(r => r.confidence > 0.5);
-
-        results.forEach(r => {
-            const index = categories.indexOf(r.label);
-            if (index !== -1) categoryCounts[index]++;
         });
 
-        const output = document.getElementById('predictions');
-        const resultHTML = `<h3>Page ${pageNum}</h3>` +
-            (results.length ?
-                results.map(r => `<div>${r.label}: ${(r.confidence * 100).toFixed(1)}%</div>`).join('') :
-                '<div>No confident predictions</div>');
-        output.innerHTML += resultHTML;
-    }
-
-    document.getElementById('pdfUpload').addEventListener('change', async event => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const model = await loadModel();
-
-        await processPDF(model, pdf);
+        const path = mode === 'page' ? 'model/page_type' : 'model/section_type';
+        await model.save(`downloads://${path}`);
+        document.getElementById('status').innerText = `Model saved to ${path}`;
     });
+
+    function loadImage(file) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = URL.createObjectURL(file);
+        });
+    }
     </script>
 </body>
 </html>
