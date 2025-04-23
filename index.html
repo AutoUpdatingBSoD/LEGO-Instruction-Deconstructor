@@ -20,12 +20,14 @@
         'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
 
+    const categoryCounts = new Array(categories.length).fill(0);
+
     async function loadModel() {
         await tf.setBackend('webgl').catch(async () => {
             await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
         });
         await tf.ready();
-        return await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
+        return await tf.loadLayersModel('model/modelfiles/model.json');
     }
 
     async function processPageImages(model, pdf, pageNum) {
@@ -59,6 +61,11 @@
             .map((v, i) => ({ label: categories[i], confidence: v }))
             .filter(r => r.confidence > 0.5);
 
+        results.forEach(r => {
+            const index = categories.indexOf(r.label);
+            if (index !== -1) categoryCounts[index]++;
+        });
+
         const output = document.getElementById('predictions');
         const resultHTML = `<h3>Page ${pageNum}</h3>` +
             (results.length ?
@@ -78,6 +85,10 @@
         for (let i = 1; i <= pdf.numPages; i++) {
             await processPageImages(model, pdf, i);
         }
+
+        const countSummary = categories.map((label, index) =>
+            `<div>${label}: ${categoryCounts[index]} detections</div>`).join('');
+        document.getElementById('predictions').innerHTML += '<h2>Summary</h2>' + countSummary;
     });
     </script>
 </body>
