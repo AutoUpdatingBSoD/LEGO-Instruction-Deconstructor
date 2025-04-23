@@ -1,86 +1,61 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>LEGO Classifier Testing</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+    <title>LEGO Multi-Label Classifier - Testing</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        canvas, img { max-width: 100px; margin: 5px; }
+    </style>
 </head>
 <body>
-  <h2>LEGO Multi-Label Classifier - Testing</h2>
-  <input type="file" id="pdfInput" accept="application/pdf">
-  <button onclick="processPDF()">Process PDF</button>
-  <div id="output"></div>
+    <h1>Testing LEGO Classifier</h1>
+    <input type="file" id="imageUpload" accept="image/*">
+    <div id="predictions"></div>
 
-<script>
-const categories = [
-  'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
-  'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
-];
-let model;
+    <script>
+    const categories = [
+        'bagset', 'dontreadrepeat', 'finish', 'index', 'pageno',
+        'part', 'partstep', 'repeat', 'splitdecision', 'subbuild'
+    ];
 
-async function loadModel() {
-  await tf.setBackend('webgl').catch(async () => {
-    await tf.setBackend('wasm').catch(async () => {
-      await tf.setBackend('cpu');
-    });
-  });
-  await tf.ready();
-  model = await tf.loadLayersModel('model/modelfiles/lego-classifier.json');
-  console.log("loaded model.");
-}
-
-async function processPDF() {
-  const file = document.getElementById('pdfInput').files[0];
-  if (!file) return;
-  document.getElementById('output').innerHTML = 'Loading model and PDF...';
-
-  await loadModel();
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const results = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2 });
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-
-    await page.render({ canvasContext: context, viewport }).promise;
-
-    const predictions = await detectAndClassify(canvas);
-    results.push({ page: i, predictions });
-  }
-
-  document.getElementById('output').innerHTML = '<pre>' + JSON.stringify(results, null, 2) + '</pre>';
-}
-
-async function detectAndClassify(canvas) {
-  const results = [];
-  const fullImg = tf.browser.fromPixels(canvas).toFloat().div(255);
-  const [imgH, imgW] = fullImg.shape.slice(0, 2);
-  const cropSize = 128;
-
-  for (let y = 0; y < imgH - cropSize; y += cropSize) {
-    for (let x = 0; x < imgW - cropSize; x += cropSize) {
-      const crop = tf.image.cropAndResize(
-        fullImg.expandDims(0),
-        [[y / imgH, x / imgW, (y + cropSize) / imgH, (x + cropSize) / imgW]],
-        [0], [64, 64]);
-      const prediction = model.predict(crop).dataSync();
-      const labels = prediction.map((v, idx) => v > 0.5 ? categories[idx] : null).filter(Boolean);
-      if (labels.length > 0) {
-        results.push({ box: [x, y, cropSize, cropSize], labels });
-      }
-      tf.dispose(crop);
+    async function loadModel() {
+        await tf.setBackend('webgl').catch(async () => {
+            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+        });
+        await tf.ready();
+        return await tf.loadLayersModel('model/modelfiles/model.json');
     }
-  }
-  tf.dispose(fullImg);
-  return results;
-}
-</script>
+
+    async function predictImage(model, imgElement) {
+        const tensor = tf.browser.fromPixels(imgElement)
+            .resizeNearestNeighbor([64, 64])
+            .toFloat()
+            .div(255.0)
+            .expandDims();
+
+        const prediction = model.predict(tensor);
+        const values = await prediction.data();
+
+        const results = Array.from(values)
+            .map((v, i) => ({ label: categories[i], confidence: v }))
+            .filter(r => r.confidence > 0.5);
+
+        const output = document.getElementById('predictions');
+        output.innerHTML = results.length ?
+            results.map(r => `<div>${r.label}: ${(r.confidence * 100).toFixed(1)}%</div>`).join('') :
+            '<div>No confident predictions</div>';
+    }
+
+    document.getElementById('imageUpload').addEventListener('change', async event => {
+        const model = await loadModel();
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => predictImage(model, img);
+    });
+    </script>
 </body>
 </html>
