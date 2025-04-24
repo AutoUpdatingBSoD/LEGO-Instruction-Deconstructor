@@ -98,8 +98,9 @@
 
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const pageTypeModel = await loadModel('model/pagetypes/model.json');
-        const sectionModel = await loadModel('model/sections/model.json');
+        const pageTypeModel = await loadModel('model/page_type/page-model.json');
+        const sectionModel = await loadModel('model/section_type/section-model.json');
+
 
         await processPDF(pageTypeModel, sectionModel, pdf);
     });
