@@ -5,12 +5,12 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
-        canvas, img { max-width: 100px; margin: 5px; }
     </style>
 </head>
 <body>
     <h1>Training LEGO Classifier</h1>
-    <div id="status"></div>
+    <button onclick="trainModels()">Train Models</button>
+    <pre id="log"></pre>
 
     <script>
     const pageCategories = ['finish', 'index'];
@@ -19,81 +19,94 @@
         'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
     const imageDir = 'model/dataset';
+    const indices = [2, 4, 5, 2, 4, 26, 18, 4, 2, 6];
 
-    const pageIndices = [2, 4];
-    const sectionIndices = [5, 2, 4, 26, 18, 4, 2, 6];
-
-    function getLabelVector(index, isPage) {
-        const labelVector = new Array(isPage ? pageCategories.length : sectionCategories.length).fill(0);
-        labelVector[index] = 1;
-        return labelVector;
-    }
-
-    function getSectionMaskForPageType(pageTypeIndex) {
-        const mask = new Array(sectionCategories.length).fill(0);
-        switch (pageTypeIndex) {
-            case 0: // finish
-                mask[0] = 1; mask[2] = 1; mask[3] = 1; mask[4] = 1; break;
-            case 1: // index
-                mask[1] = 1; mask[4] = 1; mask[5] = 1; mask[7] = 1; break;
-        }
-        return mask;
-    }
-
-    async function loadImages(categories, indices, isPage) {
-        const images = [];
-        const labels = [];
-
-        for (let label = 0; label < categories.length; label++) {
-            for (let i = 1; i <= indices[label]; i++) {
-                const imgPath = `${imageDir}/${categories[label]}/${categories[label]} ${i}.png`;
-                const img = new Image();
-                img.src = imgPath;
-                await new Promise((resolve) => { img.onload = resolve; });
-
-                const tensor = tf.browser.fromPixels(img)
-                    .resizeNearestNeighbor([64, 64])
-                    .toFloat()
-                    .div(255.0);
-                images.push(tensor);
-                labels.push(getLabelVector(label, isPage));
-            }
-        }
-
-        return { xs: tf.stack(images), ys: tf.tensor2d(labels) };
-    }
-
-    async function trainModel(name, xs, ys, labelSize) {
-        const model = tf.sequential();
-        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
-        model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
-        model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: labelSize, activation: 'sigmoid' }));
-
-        model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
-
-        await model.fit(xs, ys, {
-            epochs: 15,
-            batchSize: 16,
-            callbacks: {
-                onEpochEnd: (epoch, logs) => {
-                    document.getElementById('status').innerText = `${name} - Epoch ${epoch + 1}: loss=${logs.loss.toFixed(4)}, acc=${logs.acc.toFixed(4)}`;
-                }
-            }
+    async function loadImage(src) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.src = src;
         });
-
-        await model.save(`downloads://${name}-model`);
-        document.getElementById('status').innerText += `\n${name} model saved successfully!`;
     }
 
-    (async () => {
-        const pageData = await loadImages(pageCategories, pageIndices, true);
-        await trainModel('page', pageData.xs, pageData.ys, pageCategories.length);
+    async function processImage(img) {
+        return tf.tidy(() => {
+            return tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([64, 64])
+                .toFloat()
+                .div(255.0)
+                .expandDims();
+        });
+    }
 
-        const sectionData = await loadImages(sectionCategories, sectionIndices, false);
-        await trainModel('section', sectionData.xs, sectionData.ys, sectionCategories.length);
-    })();
+    function buildModel(outputSize) {
+        const model = tf.sequential();
+        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 16, kernelSize: 3, activation: 'relu' }));
+        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.flatten());
+        model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+        model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid' }));
+        model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
+        return model;
+    }
+
+    function getLabelVector(label, categories) {
+            const labelVector = new Array(categories.length).fill(0);
+            switch (label) {
+            case 0: labelVector[0] = 1; labelVector[4] = 1; break;
+            case 1: labelVector[1] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
+            case 2: labelVector[2] = 1; break;
+            case 3: labelVector[3] = 1; break;
+            case 4: labelVector[4] = 1; break;
+            case 5: labelVector[5] = 1; labelVector[7] = 1; break;
+            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+            case 7: labelVector[7] = 1; break;
+            case 8: labelVector[4] = 1; labelVector[8] = 1; break;
+            case 9: labelVector[1] = 1; labelVector[9] = 1; break;
+            }
+        return vec;
+    }
+
+    async function trainModels() {
+        const log = document.getElementById('log');
+        log.textContent = 'Loading images...\n';
+
+        const pageXs = [], pageYs = [];
+        const sectionXs = [], sectionYs = [];
+
+        for (let i = 0; i < indices.length; i++) {
+            const label = i;
+                for (let j = 1; j <= indicies[i]; j++){
+                    
+                const category = label <= 5 ? 'page' : 'section';
+                const path = `${imageDir}/${category}/${category} ${j}.png`;
+                const img = await loadImage(path);
+                const tensor = await processImage(img);
+    
+                if (j < 2) {
+                    pageXs.push(tensor);
+                    pageYs.push(getLabelVector(label, pageCategories));
+                }
+                else {            
+                    sectionXs.push(tensor);
+                    sectionYs.push(getLabelVector(label, sectionCategories));
+                }
+                log.textContent += `Loaded image ${i + 1} as ${label}\n`;
+            }
+        }
+
+        const pageModel = buildModel(pageCategories.length);
+        const sectionModel = buildModel(sectionCategories.length);
+
+        await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), { epochs: 20 });
+        await sectionModel.fit(tf.concat(sectionXs), tf.tensor2d(sectionYs), { epochs: 20 });
+
+        await pageModel.save('downloads://page-model');
+        await sectionModel.save('downloads://section-model');
+
+        log.textContent += 'Models trained and saved!';
+    }
     </script>
 </body>
 </html>
