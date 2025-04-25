@@ -3,6 +3,7 @@
 <head>
     <title>LEGO Multi-Label Classifier - Testing</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
         canvas, img { max-width: 100px; margin: 5px; }
@@ -10,99 +11,121 @@
 </head>
 <body>
     <h1>Testing LEGO Classifier</h1>
-    <input type="file" id="pdfUpload" accept="application/pdf">
-    <div id="predictions"></div>
+    <input type="file" id="pdfInput" accept="application/pdf" />
+    <div id="output"></div>
 
-    <script src="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
     <script>
-    const pageTypeCategories = ['finish', 'index'];
+    const pageCategories = ['finish', 'index'];
     const sectionCategories = [
         'bagset', 'dontreadrepeat', 'pageno', 'part',
         'partstep', 'repeat', 'splitdecision', 'subbuild'
     ];
 
-    const pageTypeCounts = new Array(pageTypeCategories.length).fill(0);
-    const sectionCounts = new Array(sectionCategories.length).fill(0);
+    async function loadModel(name) {
+        return await tf.loadLayersModel(`downloads://${name}-model/model.json`);
+    }
 
-    async function loadModel(path) {
-        await tf.setBackend('webgl').catch(async () => {
-            await tf.setBackend('wasm').catch(() => tf.setBackend('cpu'));
+    function getPredictions(pred, categories, threshold = 0.5) {
+        const result = {};
+        pred.forEach((v, i) => {
+            if (v >= threshold) {
+                const label = categories[i];
+                result[label] = (result[label] || 0) + 1;
+            }
         });
-        await tf.ready();
-        return await tf.loadLayersModel(path);
+        return result;
     }
 
-    async function processWholePage(pageTypeModel, sectionModel, canvas, pageNum) {
-        const img = new Image();
-        img.src = canvas.toDataURL();
-        await new Promise(resolve => img.onload = resolve);
-
-        await predictImage(pageTypeModel, img, pageNum, pageTypeCategories, pageTypeCounts, 'Page Type');
-        await predictImage(sectionModel, img, pageNum, sectionCategories, sectionCounts, 'Sections');
+    async function processImage(img) {
+        return tf.tidy(() => {
+            const tensor = tf.browser.fromPixels(img)
+                .resizeNearestNeighbor([64, 64])
+                .toFloat()
+                .div(255.0);
+            return tensor.expandDims();
+        });
     }
 
-    async function processPDF(pageTypeModel, sectionModel, pdf) {
+    async function runClassification(imgElement, pageModel, sectionModel) {
+        const tensor = await processImage(imgElement);
+        const pagePred = await pageModel.predict(tensor).data();
+        const pageResults = getPredictions(pagePred, pageCategories);
+        tensor.dispose();
+
+        // Sliding window detection for sections
+        const imgTensor = tf.browser.fromPixels(imgElement);
+        const [imgHeight, imgWidth] = imgTensor.shape.slice(0, 2);
+
+        const windowSize = 64;
+        const stride = 32;
+        const sectionResults = {};
+
+        for (let y = 0; y <= imgHeight - windowSize; y += stride) {
+            for (let x = 0; x <= imgWidth - windowSize; x += stride) {
+                const patch = tf.tidy(() => {
+                    return imgTensor.slice([y, x, 0], [windowSize, windowSize, 3])
+                        .resizeNearestNeighbor([64, 64])
+                        .toFloat()
+                        .div(255.0)
+                        .expandDims();
+                });
+
+                const sectionPred = await sectionModel.predict(patch).data();
+                const localResults = getPredictions(sectionPred, sectionCategories);
+
+                for (let label in localResults) {
+                    sectionResults[label] = (sectionResults[label] || 0) + localResults[label];
+                }
+                patch.dispose();
+            }
+        }
+
+        imgTensor.dispose();
+        return { pageResults, sectionResults };
+    }
+
+    async function renderPDF(file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const output = document.getElementById('output');
+        output.innerHTML = 'Loading models...';
+
+        const pageModel = await loadModel('page');
+        const sectionModel = await loadModel('section');
+
+        output.innerHTML = '';
+
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
+            const viewport = page.getViewport({ scale: 2 });
             canvas.width = viewport.width;
             canvas.height = viewport.height;
 
-            await page.render({ canvasContext: context, viewport }).promise;
+            await page.render({ canvasContext: ctx, viewport }).promise;
 
-            await processWholePage(pageTypeModel, sectionModel, canvas, i);
+            const img = new Image();
+            img.src = canvas.toDataURL();
+            await new Promise(resolve => img.onload = resolve);
+
+            const results = await runClassification(img, pageModel, sectionModel);
+
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>Page ${i}</strong><br>
+                <img src="${img.src}" /><br>
+                <strong>Page Predictions:</strong> ${JSON.stringify(results.pageResults)}<br>
+                <strong>Section Predictions:</strong> ${JSON.stringify(results.sectionResults)}<br>`;
+            output.appendChild(div);
         }
-
-        const pageSummary = pageTypeCategories.map((label, index) =>
-            `<div>${label}: ${pageTypeCounts[index]} detections</div>`).join('');
-        const sectionSummary = sectionCategories.map((label, index) =>
-            `<div>${label}: ${sectionCounts[index]} detections</div>`).join('');
-
-        document.getElementById('predictions').innerHTML += '<h2>Summary</h2>' +
-            '<h3>Page Types</h3>' + pageSummary +
-            '<h3>Sections</h3>' + sectionSummary;
     }
 
-    async function predictImage(model, imgElement, pageNum, categories, categoryCounts, labelTitle) {
-        const tensor = tf.browser.fromPixels(imgElement)
-            .resizeNearestNeighbor([64, 64])
-            .toFloat()
-            .div(255.0)
-            .expandDims();
-
-        const prediction = model.predict(tensor);
-        const values = await prediction.data();
-
-        const results = Array.from(values)
-            .map((v, i) => ({ label: categories[i], confidence: v }))
-            .filter(r => r.confidence > 0.5);
-
-        results.forEach(r => {
-            const index = categories.indexOf(r.label);
-            if (index !== -1) categoryCounts[index]++;
-        });
-
-        const output = document.getElementById('predictions');
-        const resultHTML = `<h3>${labelTitle} - Page ${pageNum}</h3>` +
-            (results.length ?
-                results.map(r => `<div>${r.label}: ${(r.confidence * 100).toFixed(1)}%</div>`).join('') :
-                '<div>No confident predictions</div>');
-        output.innerHTML += resultHTML;
-    }
-
-    document.getElementById('pdfUpload').addEventListener('change', async event => {
+    document.getElementById('pdfInput').addEventListener('change', async (event) => {
         const file = event.target.files[0];
-        if (!file) return;
-
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const pageTypeModel = await loadModel('model/page_type/page-model.json');
-        const sectionModel = await loadModel('model/section_type/section-model.json');
-
-
-        await processPDF(pageTypeModel, sectionModel, pdf);
+        if (file) {
+            await renderPDF(file);
+        }
     });
     </script>
 </body>
