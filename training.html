@@ -23,29 +23,29 @@
     const pageIndices = [2, 4];
     const sectionIndices = [5, 2, 4, 26, 18, 4, 2, 6];
 
-    function getLabelVector(categoryIndex) {
-        const labelVector = new Array(10).fill(0);
-        switch (categoryIndex) {
-            case 0: labelVector[2] = 1; labelVector[4] = 1; break;
-            case 1: labelVector[3] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
-            case 2: labelVector[0] = 1; break;
-            case 3: labelVector[1] = 1; break;
-            case 4: labelVector[4] = 1; break;
-            case 5: labelVector[5] = 1; labelVector[7] = 1; break;
-            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
-            case 7: labelVector[7] = 1; break;
-            case 8: labelVector[4] = 1; labelVector[8] = 1; break;
-            case 9: labelVector[1] = 1; labelVector[9] = 1; break;
-        }
+    function getLabelVector(index, isPage) {
+        const labelVector = new Array(isPage ? pageCategories.length : sectionCategories.length).fill(0);
+        labelVector[index] = 1;
         return labelVector;
     }
 
-    async function loadImages(categories, indices, ith) {
+    function getSectionMaskForPageType(pageTypeIndex) {
+        const mask = new Array(sectionCategories.length).fill(0);
+        switch (pageTypeIndex) {
+            case 0: // finish
+                mask[0] = 1; mask[2] = 1; mask[3] = 1; mask[4] = 1; break;
+            case 1: // index
+                mask[1] = 1; mask[4] = 1; mask[5] = 1; mask[7] = 1; break;
+        }
+        return mask;
+    }
+
+    async function loadImages(categories, indices, isPage) {
         const images = [];
         const labels = [];
-        
-        for (let label = ith; label < categories.length; label++) {
-            for (let i = 1; i <= indices[label]; i++) {
+
+        for (let label = 0; label < categories.length; label++) {
+            for (let i = 0; i < indices[label]; i++) {
                 const imgPath = `${imageDir}/${categories[label]}/${categories[label]} ${i}.png`;
                 const img = new Image();
                 img.src = imgPath;
@@ -56,20 +56,20 @@
                     .toFloat()
                     .div(255.0);
                 images.push(tensor);
-                labels.push(getLabelVector(label));
+                labels.push(getLabelVector(label, isPage));
             }
         }
 
         return { xs: tf.stack(images), ys: tf.tensor2d(labels) };
     }
 
-    async function trainModel(name, xs, ys) {
+    async function trainModel(name, xs, ys, labelSize) {
         const model = tf.sequential();
         model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 32, kernelSize: 3, activation: 'relu' }));
         model.add(tf.layers.maxPooling2d({ poolSize: [2, 2] }));
         model.add(tf.layers.flatten());
         model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: 10, activation: 'sigmoid' }));
+        model.add(tf.layers.dense({ units: labelSize, activation: 'sigmoid' }));
 
         model.compile({ optimizer: 'adam', loss: 'binaryCrossentropy', metrics: ['accuracy'] });
 
@@ -88,11 +88,11 @@
     }
 
     (async () => {
-        const pageData = await loadImages(pageCategories, pageIndices, 0);
-        await trainModel('page', pageData.xs, pageData.ys);
+        const pageData = await loadImages(pageCategories, pageIndices, true);
+        await trainModel('page', pageData.xs, pageData.ys, pageCategories.length);
 
-        const sectionData = await loadImages(sectionCategories, sectionIndices, 2);
-        await trainModel('section', sectionData.xs, sectionData.ys);
+        const sectionData = await loadImages(sectionCategories, sectionIndices, false);
+        await trainModel('section', sectionData.xs, sectionData.ys, sectionCategories.length);
     })();
     </script>
 </body>
