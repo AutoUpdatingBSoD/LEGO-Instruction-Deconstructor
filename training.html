@@ -20,6 +20,18 @@
     ];
     const imageDir = 'model/dataset';
     const indices = [2, 4, 5, 2, 4, 26, 18, 4, 2, 6];
+          const backends = ['webgl', 'wasm', 'cpu'];
+
+  for (const backend of backends) {
+    try {
+      await tf.setBackend(backend);
+      await tf.ready();
+      console.log(`Using backend: ${backend}`);
+      break;
+    } catch (e) {
+      console.warn(`Backend ${backend} not available:`, e);
+    }
+  }
     //alert(indices[0]);
     async function loadImage(src) {
         return new Promise((resolve) => {
