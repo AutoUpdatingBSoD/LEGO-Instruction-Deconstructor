@@ -56,9 +56,10 @@
         const model = tf.sequential();
         model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 16, kernelSize: 3,activation: 'relu'}));
         model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+        model.add(tf.layers.flatten());
         model.add(tf.layers.dense({ inputShape: [64, 64, 3], units: outputSize, activation: 'relu' }));
         model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid'}));
-        model.add(tf.layers.flatten());
+
         model.compile({
           loss: 'binaryCrossentropy',
           optimizer: 'adam',
