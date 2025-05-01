@@ -33,7 +33,7 @@ async function loadbackend(){
     }
   }
 }
-        loadbackend();
+
     //alert(indices[0]);
     async function loadImage(src) {
         return new Promise((resolve) => {
@@ -90,7 +90,7 @@ async function loadbackend(){
     async function trainModels() {
         const log = document.getElementById('log');
         log.textContent = 'Loading images...\n';
-
+        loadbackend();
         const pageXs = [], pageYs = [];
         const sectionXs = [], sectionYs = [];
         console.log(indices[0]);
