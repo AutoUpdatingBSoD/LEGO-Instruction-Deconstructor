@@ -8,7 +8,7 @@
     </style>
 </head>
 <body>
-    <h1>Training LEGO Classifiera</h1>
+    <h1>Training LEGO Classifier</h1>
     <button onclick="trainModels()">Train Models</button>
     <pre id="log"></pre>
 
@@ -74,12 +74,12 @@
 
         const pageXs = [], pageYs = [];
         const sectionXs = [], sectionYs = [];
-
+        console.log(indices[0]);
         for (let i = 0; i < indices.length; i++) {
             const label = i;
                 for (let j = 1; j <= indicies[i]; j++){
                     
-                const category = label <= 5 ? 'page' : 'section';
+                const category = label < 2 ? 'page' : 'section';
                 const path = `${imageDir}/${category}/${category} ${j}.png`;
                 const img = await loadImage(path);
                 const tensor = await processImage(img);
