@@ -96,10 +96,10 @@
                     sectionXs.push(tensor);
                     sectionYs.push(getLabelVector(label, sectionCategories));
                 }
-                log.textContent += `Loaded image ${i + 1} as ${label}\n`;
+                //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
             }
         }
-
+        log.textContent += "Done\n";
         const pageModel = buildModel(pageCategories.length);
         const sectionModel = buildModel(sectionCategories.length);
 
