@@ -77,7 +77,8 @@
         console.log(indices[0]);
         for (let i = 0; i < indices.length; i++) {
             const label = i;
-                for (let j = 1; j <= indicies[i]; j++){
+            const index = indicies[i];
+                for (let j = 1; j <= index; j++){
                     
                 const category = label < 2 ? 'page' : 'section';
                 const path = `${imageDir}/${category}/${category} ${j}.png`;
