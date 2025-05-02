@@ -70,23 +70,28 @@ async function loadbackend(){
         return model;
     }
 
-    function getLabelVector(label, categories) {
+    function getLabelVectorP(label, categories) {
             const labelVector = new Array(categories.length).fill(0);
             switch (label) {
-            case 0: labelVector[0] = 1; labelVector[4] = 1; break;
-            case 1: labelVector[1] = 1; labelVector[4] = 1; labelVector[5] = 1; labelVector[7] = 1; break;
-            case 2: labelVector[2] = 1; break;
-            case 3: labelVector[3] = 1; break;
-            case 4: labelVector[4] = 1; break;
-            case 5: labelVector[5] = 1; labelVector[7] = 1; break;
-            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
-            case 7: labelVector[7] = 1; break;
-            case 8: labelVector[4] = 1; labelVector[8] = 1; break;
-            case 9: labelVector[1] = 1; labelVector[9] = 1; break;
+            case 0: labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; break;
             }
         return labelVector;
     }
-
+       function getLabelVectorS(label, categories) {
+            const labelVector = new Array(categories.length).fill(0);
+            switch (label) {
+            case 0: labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; break;
+            case 2: labelVector[2] = 1; break;
+            case 3: labelVector[3] = 1; labelVector[5] = 1; break;
+            case 4: labelVector[4] = 1; labelVector[5] = 1; break;
+            case 5: labelVector[5] = 1; break;
+            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
+            case 7: labelVector[7] = 1; break;
+            }
+        return labelVector;
+    }
     async function trainModels() {
         const log = document.getElementById('log');
         log.textContent = 'Loading images...\n';
@@ -105,11 +110,11 @@ async function loadbackend(){
     
                 if (j < 2) {
                     pageXs.push(tensor);
-                    pageYs.push(getLabelVector(label, pageCategories));
+                    pageYs.push(getLabelVectorP(label, pageCategories));
                 }
                 else {            
                     sectionXs.push(tensor);
-                    sectionYs.push(getLabelVector(label, sectionCategories));
+                    sectionYs.push(getLabelVectorS(label, sectionCategories));
                 }
                 //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
             }
