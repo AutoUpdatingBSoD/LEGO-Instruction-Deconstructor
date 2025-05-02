@@ -1,116 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LEGO Classifier - Testing</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <title>PDF Testing</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 </head>
 <body>
-<h1>LEGO Classifier Testing</h1>
-<canvas id="pdfCanvas" style="display:none;"></canvas>
-<script>
-const sectionCategories = [
-    'bagset', 'dontreadrepeat', 'pageno', 'part',
-    'partstep', 'repeat', 'splitdecision', 'subbuild', 'extra1', 'extra2'
-];
-const pageCategories = ['finish', 'index'];
+  <h2>Upload PDF for Model Testing</h2>
+  <input type="file" id="pdf-upload" accept="application/pdf">
+  <pre id="log">Awaiting file upload...</pre>
 
-async function loadModels() {
-    const pageModel = await tf.loadLayersModel('page-model/page-model.json');
-    const sectionModel = await tf.loadLayersModel('section-model/section-model.json');
-    return { pageModel, sectionModel };
-}
+  <script>
+    const log = document.getElementById("log");
 
-async function renderPDFPageToCanvas(pdfUrl, pageNumber) {
-    const loadingTask = pdfjsLib.getDocument(pdfUrl);
-    const pdf = await loadingTask.promise;
-    const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.getElementById('pdfCanvas');
-    const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+    // Dummy categories — replace with your actual arrays
+    const pageCategories = ["pageno", "index"];
+    const sectionCategories = ["part", "partstep", "subbuild", "splitdecision", "repeat", "dontreadrepeat", "finished", "bagset"];
 
-    await page.render({ canvasContext: context, viewport }).promise;
-    return canvas;
-}
-
-function imageToTensor(img, size = 64) {
-    return tf.tidy(() => tf.browser.fromPixels(img)
-        .resizeNearestNeighbor([size, size])
-        .toFloat()
-        .div(255.0)
-        .expandDims(0));
-}
-
-function getPredictedPageType(pred) {
-    const index = pred.argMax(-1).dataSync()[0];
-    return pageCategories[index];
-}
-
-function getSectionDetections(preds, threshold = 0.5) {
-    const detected = [];
-    const values = preds.dataSync();
-    for (let i = 0; i < values.length; i++) {
-        if (values[i] >= threshold) {
-            detected.push({ type: sectionCategories[i], confidence: values[i].toFixed(2) });
-        }
-    }
-    return detected;
-}
-
-async function detectSections(canvas, sectionModel) {
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-
-    const patchSize = 128;
-    const step = 64; // overlapping scans
-    const detections = [];
-
-    for (let y = 0; y < height - patchSize; y += step) {
-        for (let x = 0; x < width - patchSize; x += step) {
-            const patch = ctx.getImageData(x, y, patchSize, patchSize);
-            const tensor = tf.tidy(() => tf.browser.fromPixels(patch)
-                .resizeNearestNeighbor([64, 64])
-                .toFloat()
-                .div(255.0)
-                .expandDims(0));
-
-            const prediction = await sectionModel.predict(tensor);
-            const detected = getSectionDetections(prediction);
-            if (detected.length > 0) detections.push(...detected);
-
-            tf.dispose(tensor);
-            tf.dispose(prediction);
-        }
+    // Your existing function to preprocess the image
+    async function processImage(img) {
+      return tf.tidy(() => {
+        const tensor = tf.browser.fromPixels(img)
+          .resizeNearestNeighbor([64, 64])
+          .toFloat()
+          .div(255.0);
+        return tensor.expandDims(0);
+      });
     }
 
-    const counts = {};
-    detections.forEach(d => {
-        counts[d.type] = (counts[d.type] || 0) + 1;
+    // Example model loader — swap with your trained models if needed
+    async function loadModels() {
+      const pageModel = await tf.loadLayersModel('pageModel.json'); // adjust paths
+      const sectionModel = await tf.loadLayersModel('sectionModel.json');
+      return { pageModel, sectionModel };
+    }
+
+    // Utility: get canvas from a PDF page
+    async function renderPageToCanvas(pdfPage) {
+      const viewport = pdfPage.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const context = canvas.getContext('2d');
+      await pdfPage.render({ canvasContext: context, viewport: viewport }).promise;
+      return canvas;
+    }
+
+    document.getElementById("pdf-upload").addEventListener("change", async function (e) {
+      const file = e.target.files[0];
+      if (!file || file.type !== "application/pdf") {
+        log.textContent = "Please upload a valid PDF.";
+        return;
+      }
+
+      log.textContent = `Loading models and reading PDF...\n`;
+
+      const { pageModel, sectionModel } = await loadModels();
+      const fileURL = URL.createObjectURL(file);
+      const pdf = await pdfjsLib.getDocument(fileURL).promise;
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const canvas = await renderPageToCanvas(page);
+        const tensor = await processImage(canvas);
+
+        const pagePred = await pageModel.predict(tensor).data();
+        const sectionPred = await sectionModel.predict(tensor).data();
+
+        log.textContent += `\nPage ${i} predictions:\n`;
+
+        // Format multi-label output
+        pagePred.forEach((val, idx) => {
+          if (val > 0.5) log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
+        });
+
+        sectionPred.forEach((val, idx) => {
+          if (val > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idx]} (${val.toFixed(2)})\n`;
+        });
+
+        tf.dispose([tensor]);
+      }
+
+      log.textContent += `\nDone processing all pages.`;
     });
-
-    return counts;
-}
-
-async function runDetection(pdfUrl) {
-    const { pageModel, sectionModel } = await loadModels();
-    const canvas = await renderPDFPageToCanvas(pdfUrl, 1);
-
-    const pageTensor = imageToTensor(canvas);
-    const pagePred = pageModel.predict(pageTensor);
-    const pageType = getPredictedPageType(pagePred);
-    console.log('Page type detected:', pageType);
-
-    tf.dispose(pageTensor);
-    tf.dispose(pagePred);
-
-    const sectionCounts = await detectSections(canvas, sectionModel);
-    console.log('Sections detected:', sectionCounts);
-}
-
-runDetection('example.pdf'); // Replace with your actual PDF path
-</script>
+  </script>
 </body>
 </html>
