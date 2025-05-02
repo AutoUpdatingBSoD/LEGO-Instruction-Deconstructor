@@ -54,19 +54,36 @@ async function loadbackend(){
     }
 
     function buildModel(outputSize) {
-        const model = tf.sequential();
-        model.add(tf.layers.conv2d({ inputShape: [64, 64, 3], filters: 16, kernelSize: 3,activation: 'relu'}));
-        model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-        model.add(tf.layers.flatten());
-        model.add(tf.layers.dense({ inputShape: [64, 64, 3], units: outputSize, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid'}));
+    const model = tf.sequential();
 
-        model.compile({
-          loss: 'binaryCrossentropy',
-          optimizer: 'adam',
-          metrics: ['accuracy']
-        });
-        return model;
+    model.add(tf.layers.conv2d({
+        inputShape: [64, 64, 3],
+        filters: 16,
+        kernelSize: 3,
+        activation: 'relu'
+    }));
+    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+    model.add(tf.layers.flatten());
+
+    // Optional hidden dense layer
+    model.add(tf.layers.dense({
+        units: 64,
+        activation: 'relu'
+    }));
+
+    // Final output layer
+    model.add(tf.layers.dense({
+        units: outputSize,
+        activation: 'sigmoid' // Use sigmoid for multi-label output
+    }));
+
+    model.compile({
+        loss: 'binaryCrossentropy', // Use this for multi-label problems
+        optimizer: 'adam',
+        metrics: ['accuracy']
+    });
+
+    return model;
     }
 
     function getLabelVectorP(label, categories) {
@@ -113,7 +130,7 @@ async function loadbackend(){
                 }
                 else {            
                     sectionXs.push(tensor);
-                    sectionYs.push(getLabelVectorS(label, sectionCategories));
+                    sectionYs.push(getLabelVectorS(label-2, sectionCategories));
                 }
                 //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
             }
