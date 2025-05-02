@@ -16,8 +16,8 @@ const sectionCategories = [
 const pageCategories = ['finish', 'index'];
 
 async function loadModels() {
-    const pageModel = await tf.loadLayersModel('page-model/model.json');
-    const sectionModel = await tf.loadLayersModel('section-model/model.json');
+    const pageModel = await tf.loadLayersModel('page-model/page-model.json');
+    const sectionModel = await tf.loadLayersModel('section-model/section-model.json');
     return { pageModel, sectionModel };
 }
 
