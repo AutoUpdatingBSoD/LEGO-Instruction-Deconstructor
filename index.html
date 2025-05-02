@@ -30,8 +30,8 @@
 
     // Example model loader — swap with your trained models if needed
     async function loadModels() {
-      const pageModel = await tf.loadLayersModel('/model/page_model/page-model.json'); // adjust paths
-      const sectionModel = await tf.loadLayersModel('model/section_model/section-model.json');
+      const pageModel = await tf.loadLayersModel('/model/page_type/page-model.json'); // adjust paths
+      const sectionModel = await tf.loadLayersModel('model/section_type/section-model.json');
       return { pageModel, sectionModel };
     }
 
