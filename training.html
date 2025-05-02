@@ -139,8 +139,22 @@ async function loadbackend(){
         const pageModel = buildModel(pageCategories.length);
         const sectionModel = buildModel(sectionCategories.length);
 
-        await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), { epochs: 20 });
-        await sectionModel.fit(tf.concat(sectionXs), tf.tensor2d(sectionYs), { epochs: 20 });
+        await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), 
+  epochs: 200,
+  callbacks: tf.callbacks.earlyStopping({
+    monitor: 'loss',
+    patience: 10,
+    restoreBestWeight: true
+  })
+});
+        await sectionModel.fit(tf.concat(sectionXs), tf.tensor2d(sectionYs), 
+  epochs: 200,
+  callbacks: tf.callbacks.earlyStopping({
+    monitor: 'loss',
+    patience: 10,
+    restoreBestWeight: true
+  })
+});
 
         await pageModel.save('downloads://page-model');
         await sectionModel.save('downloads://section-model');
