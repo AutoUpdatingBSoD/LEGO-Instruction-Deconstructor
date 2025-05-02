@@ -9,7 +9,6 @@
 </head>
 <body>
     <h1>Training LEGO Classifier</h1>
-    <button onclick="trainModels()">Train Models</button>
     <pre id="log"></pre>
 
     <script>
@@ -131,6 +130,7 @@ async function loadbackend(){
 
         log.textContent += 'Models trained and saved!';
     }
+        trainModels();
     </script>
 </body>
 </html>
