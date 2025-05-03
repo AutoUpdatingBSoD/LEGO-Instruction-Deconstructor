@@ -177,16 +177,16 @@ async function loadbackend(){
                         const img = await loadImage(path);
                         const tensor = await processImage(img);
                         tempXs.push(tensor);
-                        if (l == 4){
+                        if (i == 4){
                             tempYs.push(getLabelVectorS5(l, sectionCategories[i]));
                         }
-                        else if (l == 1){
+                        else if (i == 1){
                             tempYs.push(getLabelVectorS2(l, sectionCategories[i]));
                         }
-                        else if (l == 3){
+                        else if (i == 3){
                             tempYs.push(getLabelVectorS4(l, sectionCategories[i]));
                         }
-                        else  {
+                        else{
                             tempYs.push(getLabelVectorS(l, sectionCategories[i]));
                         }
                         
