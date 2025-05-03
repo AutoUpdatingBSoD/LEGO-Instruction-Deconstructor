@@ -166,7 +166,7 @@ async function loadbackend(){
                     pageYs.push(getLabelVectorP(label, pageCategories));
                 //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
             }
-                                log.textContent = 'Loaded '+category+'\n';
+                                log.textContent += 'Loaded '+category+'\n';
                 let sectioni = indicess[i];
                 const tempXs = [], tempYs = [];
                 for (let l = 0; l < sectioni; l++){
@@ -192,7 +192,7 @@ async function loadbackend(){
                         
 
                     }
-                    log.textContent = 'Loaded '+categoryS+' of '+category+'\n';
+                    log.textContent += 'Loaded '+categoryS+' of '+category+'\n';
                 }
             sectionXs.push(tempXs);
             sectionYs.push(tempYs);
