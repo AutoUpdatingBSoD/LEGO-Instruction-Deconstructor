@@ -166,31 +166,33 @@ async function loadbackend(){
                     pageYs.push(getLabelVectorP(label, pageCategories));
                 //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
             }
+                                log.textContent = 'Loaded '+category+'\n';
                 let sectioni = indicess[i];
                 const tempXs = [], tempYs = [];
                 for (let l = 0; l < sectioni; l++){
                     let labelS = sectioni[l];
-                    let category = sectionCategories[i][l];
-                    for (let m = 1; m <= labelS; j++){
-                        const path = `${imageDir}/${category}/${category} ${m}.png`;
+                    let categoryS = sectionCategories[i][l];
+                    for (let m = 1; m <= labelS; m++){
+                        const path = `${imageDir}/${categoryS}/${categoryS} ${m}.png`;
                         const img = await loadImage(path);
                         const tensor = await processImage(img);
                         tempXs.push(tensor);
                         if (l == 4){
-                            tempYs.push(getLabelVectorS5(l, sectionCategories));
+                            tempYs.push(getLabelVectorS5(l, sectionCategories[i]));
                         }
                         else if (l == 1){
-                            tempYs.push(getLabelVectorS2(l, sectionCategories));
+                            tempYs.push(getLabelVectorS2(l, sectionCategories[i]));
                         }
                         else if (l == 3){
-                            tempYs.push(getLabelVectorS4(l, sectionCategories));
+                            tempYs.push(getLabelVectorS4(l, sectionCategories[i]));
                         }
                         else  {
-                            tempYs.push(getLabelVectorS(l, sectionCategories));
+                            tempYs.push(getLabelVectorS(l, sectionCategories[i]));
                         }
                         
 
                     }
+                    log.textContent = 'Loaded '+categoryS+' of '+category+'\n';
                 }
             sectionXs.push(tempXs);
             sectionYs.push(tempYs);
