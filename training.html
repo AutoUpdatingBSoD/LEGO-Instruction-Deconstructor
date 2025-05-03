@@ -12,13 +12,25 @@
     <pre id="log"></pre>
 
     <script>
-    const pageCategories = ['finish', 'index'];
+    const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
     const sectionCategories = [
-        'bagset', 'dontreadrepeat', 'pageno', 'part',
-        'partstep', 'repeat', 'splitdecision', 'subbuild'
+        ['pageno'],
+        ['pageno', 'part',
+        'repeat'],
+        ['pageno'],
+        ['pageno' 'splitdecision'],
+        ['bagset', 'dontreadrepeat', 'pageno', 'part',
+        'partstep', 'repeat', 'subbuild'],
+        
     ];
     const imageDir = 'model/dataset';
-    const indices = [2, 4, 5, 2, 4, 26, 18, 4, 2, 6];
+    const indicesp = [2, 4, 66, 2, 346]
+    const indicess = [
+        [4],
+        [4, 26, 4],
+        [4],
+        [4, 2],
+        [5, 2, 4, 26, 18, 4, 6]];
           const backends = ['webgl', 'wasm', 'cpu'];
 async function loadbackend(){
   for (const backend of backends) {
@@ -91,10 +103,38 @@ async function loadbackend(){
             switch (label) {
             case 0: labelVector[0] = 1; break;
             case 1: labelVector[1] = 1; break;
+            case 2: labelVector[2] = 1; break;
+            case 3: labelVector[3] = 1; break;
+            case 4: labelVector[4] = 1; break;
             }
         return labelVector;
     }
        function getLabelVectorS(label, categories) {
+            const labelVector = new Array(categories.length).fill(0);
+            switch (label) {
+            case 0: labelVector[0] = 1; break;
+            }
+        return labelVector;
+    }
+    function getLabelVectorS2(label, categories) {
+            const labelVector = new Array(categories.length).fill(0);
+            switch (label) {
+            case 0: labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; labelVector[2] = 1; break;
+            case 2: labelVector[2] = 1; break;
+            }
+        return labelVector;
+    }
+            }
+    function getLabelVectorS4(label, categories) {
+            const labelVector = new Array(categories.length).fill(0);
+            switch (label) {
+            case 0: labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; labelVector[0] = 1; break;
+            }
+        return labelVector;
+    }
+        function getLabelVectorS5(label, categories) {
             const labelVector = new Array(categories.length).fill(0);
             switch (label) {
             case 0: labelVector[0] = 1; break;
@@ -103,8 +143,7 @@ async function loadbackend(){
             case 3: labelVector[3] = 1; labelVector[5] = 1; break;
             case 4: labelVector[4] = 1; labelVector[5] = 1; break;
             case 5: labelVector[5] = 1; break;
-            case 6: labelVector[6] = 1; labelVector[7] = 1; break;
-            case 7: labelVector[7] = 1; break;
+            case 6: labelVector[6] = 1; labelVector[1] = 1; break;
             }
         return labelVector;
     }
@@ -114,32 +153,52 @@ async function loadbackend(){
         loadbackend();
         const pageXs = [], pageYs = [];
         const sectionXs = [], sectionYs = [];
-        console.log(indices[0]);
-        for (let i = 0; i < indices.length; i++) {
+        //console.log(indices[0]);
+        for (let i = 0; i < indicesp.length; i++) {
             let label = i;
-                for (let j = 1; j <= indices[i]; j++){
+            let category = pageCategories[label];
+                for (let j = 1; j <= indicesp[i]; j++){
                     
-                const category = label < 2 ? pageCategories[label] : sectionCategories[label - 2];
                 const path = `${imageDir}/${category}/${category} ${j}.png`;
                 const img = await loadImage(path);
                 const tensor = await processImage(img);
     
-                if (j < 2) {
                     pageXs.push(tensor);
                     pageYs.push(getLabelVectorP(label, pageCategories));
-                }
-                else {            
-                    sectionXs.push(tensor);
-                    sectionYs.push(getLabelVectorS(label-2, sectionCategories));
-                }
                 //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
             }
+                let sectioni = indices[i];
+                const tempXs = [], tempYs = [];
+                for (let l = 0; l < sectioni; l++){
+                    let labelS = sectioni[l];
+                    let category = sectionCategories[i][l];
+                    for (let m = 0; m < labelS; j++){
+                        const path = `${imageDir}/${category}/${category} ${m}.png`;
+                        const img = await loadImage(path);
+                        const tensor = await processImage(img);
+                        tempXs.push(tensor);
+                        if (l == 4){
+                            tempYs.push(getLabelVectorS5(l, sectionCategories));
+                        }
+                        else if (l == 1){
+                            tempYs.push(getLabelVectorS2(l, sectionCategories));
+                        }
+                        else if (l == 3){
+                            tempYs.push(getLabelVectorS4(l, sectionCategories));
+                        }
+                        else  {
+                            tempYs.push(getLabelVectorS(l, sectionCategories));
+                        }
+                        
+
+                    }
+                }
+            sectionXs.push(tempXs);
+            sectionYs.push(tempYs);
         }
         log.textContent += "Done\n";
         const pageModel = buildModel(pageCategories.length);
-        const sectionModel = buildModel(sectionCategories.length);
-
-        await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), 
+        await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
   epochs: 200,
   callbacks: tf.callbacks.earlyStopping({
     monitor: 'loss',
@@ -147,17 +206,20 @@ async function loadbackend(){
     restoreBestWeight: true
   })
 });
-        await sectionModel.fit(tf.concat(sectionXs), tf.tensor2d(sectionYs), 
-  epochs: 200,
-  callbacks: tf.callbacks.earlyStopping({
-    monitor: 'loss',
-    patience: 10,
-    restoreBestWeight: true
-  })
-});
-
         await pageModel.save('downloads://page-model');
-        await sectionModel.save('downloads://section-model');
+        for (let i = 0; i < sectionCategories.length; i++){
+         const sectionModel = buildModel(sectionCategories[i].length);
+            
+        await sectionModel[i].fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
+          epochs: 200,
+          callbacks: tf.callbacks.earlyStopping({
+            monitor: 'loss',
+            patience: 10,
+            restoreBestWeight: true
+          })
+        });
+            await sectionModel.save('downloads://'+pageCategories[i]+'-model');
+        }
 
         log.textContent += 'Models trained and saved!';
     }
