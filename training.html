@@ -178,16 +178,16 @@ async function loadbackend(){
                         const tensor = await processImage(img);
                         tempXs.push(tensor);
                         if (l == 4){
-                            tempYs.push(getLabelVectorS5(l, sectionCategories[i]));
+                            tempYs.push(getLabelVectorS5(l, sectionCategories[l]));
                         }
                         else if (l == 1){
-                            tempYs.push(getLabelVectorS2(l, sectionCategories[i]));
+                            tempYs.push(getLabelVectorS2(l, sectionCategories[l]));
                         }
                         else if (l == 3){
-                            tempYs.push(getLabelVectorS4(l, sectionCategories[i]));
+                            tempYs.push(getLabelVectorS4(l, sectionCategories[l]));
                         }
                         else  {
-                            tempYs.push(getLabelVectorS(l, sectionCategories[i]));
+                            tempYs.push(getLabelVectorS(l, sectionCategories[l]));
                         }
                         
 
@@ -209,7 +209,7 @@ async function loadbackend(){
 });
         await pageModel.save('downloads://page-model');
         for (let i = 0; i < sectionCategories.length; i++){
-            alert(sectionCategories[i].length);
+            //alert(sectionCategories[i].length);
          const sectionModel = buildModel(sectionCategories[i].length);
             
         await sectionModel.fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
