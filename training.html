@@ -212,7 +212,7 @@ async function loadbackend(){
             alert(sectionCategories[i].length);
          const sectionModel = buildModel(sectionCategories[i].length);
             
-        await sectionModel[i].fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
+        await sectionModel.fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
           epochs: 200,
           callbacks: tf.callbacks.earlyStopping({
             monitor: 'loss',
