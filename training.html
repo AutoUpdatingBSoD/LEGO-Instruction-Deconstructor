@@ -129,7 +129,7 @@ async function loadbackend(){
             const labelVector = new Array(categories.length).fill(0);
             switch (label) {
             case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; labelVector[0] = 1; break;
+            case 1: labelVector[1] = 1; break;
             }
         return labelVector;
     }
