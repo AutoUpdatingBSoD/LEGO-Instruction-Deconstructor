@@ -207,6 +207,7 @@ async function loadbackend(){
 });
         await pageModel.save('downloads://page-model');
         for (let i = 0; i < sectionCategories.length; i++){
+            alert(sectionCategories[i].length);
          const sectionModel = buildModel(sectionCategories[i].length);
             
         await sectionModel[i].fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
