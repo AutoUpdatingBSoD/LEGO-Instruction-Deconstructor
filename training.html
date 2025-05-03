@@ -169,7 +169,7 @@ async function loadbackend(){
                                 log.textContent += 'Loaded '+category+'\n';
                 let sectioni = indicess[i];
                 const tempXs = [], tempYs = [];
-                for (let l = 0; l < sectioni; l++){
+                for (let l = 0; l < sectioni.length; l++){
                     let labelS = sectioni[l];
                     let categoryS = sectionCategories[i][l];
                     for (let m = 1; m <= labelS; m++){
