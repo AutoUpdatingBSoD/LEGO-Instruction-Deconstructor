@@ -14,8 +14,25 @@
     const log = document.getElementById("log");
 
     // Dummy categories — replace with your actual arrays
-    const pageCategories = ["pageno", "index"];
-    const sectionCategories = ["part", "partstep", "subbuild", "splitdecision", "repeat", "dontreadrepeat", "finished", "bagset"];
+    const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
+    const sectionCategories = [
+        ['pageno'],
+        ['pageno', 'part',
+        'repeat'],
+        ['pageno'],
+        ['pageno', 'splitdecision'],
+        ['bagset', 'dontreadrepeat', 'pageno', 'part',
+        'partstep', 'repeat', 'subbuild'],
+        
+    ];
+    const imageDir = 'model/dataset';
+    const indicesp = [2, 4, 66, 2, 346]
+    const indicess = [
+        [4],
+        [4, 26, 4],
+        [4],
+        [4, 2],
+        [5, 2, 4, 26, 18, 4, 6]];
 
     // Your existing function to preprocess the image
     async function processImage(img) {
@@ -31,8 +48,12 @@
     // Example model loader — swap with your trained models if needed
     async function loadModels() {
       const pageModel = await tf.loadLayersModel('/LSBPSE/model/page_type/page-model.json'); // adjust paths
-      const sectionModel = await tf.loadLayersModel('/LSBPSE/model/section_type/section-model.json');
-      return { pageModel, sectionModel };
+      const finishModel = await tf.loadLayersModel('/LSBPSE/model/section_type/finish-model.json');
+      const indexModel = await tf.loadLayersModel('/LSBPSE/model/section_type/index-model.json');
+      const extraModel = await tf.loadLayersModel('/LSBPSE/model/section_type/extra-model.json');
+      const decisionpage = await tf.loadLayersModel('/LSBPSE/model/section_type/decisionpage-model.json');
+      const steppageModel = await tf.loadLayersModel('/LSBPSE/model/section_type/steppage-model.json');
+      return { pageModel, finishModel, indexModel, extraModel, decisionpage, steppageModel };
     }
 
     // Utility: get canvas from a PDF page
@@ -55,7 +76,7 @@
 
       log.textContent = `Loading models and reading PDF...\n`;
 
-      const { pageModel, sectionModel } = await loadModels();
+      const { pageModel, finishModel, indexModel, extraModel, decisionpage, steppageModel } = await loadModels();
       const fileURL = URL.createObjectURL(file);
       const pdf = await pdfjsLib.getDocument(fileURL).promise;
 
@@ -65,18 +86,55 @@
         const tensor = await processImage(canvas);
 
         const pagePred = await pageModel.predict(tensor).data();
-        const sectionPred = await sectionModel.predict(tensor).data();
+        
 
         log.textContent += `\nPage ${i} predictions:\n`;
 
         // Format multi-label output
         pagePred.forEach((val, idx) => {
           if (val > 0.5) log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
+            if (${pageCategories[idx]) == "finish"){
+            var idi = 0;
+            const sectionPred = await finishModel.predict(tensor).data();
+            sectionPred.forEach((valy, idxy) => {
+              if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+              });
+          }
+          else if (${pageCategories[idx]) == 'index'){
+            var idi = 1;
+            const sectionPred = await indexModel.predict(tensor).data();
+            sectionPred.forEach((valy, idxy) => {
+              if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+              });
+          }
+          else if (${pageCategories[idx]) == 'extra'){
+            var idi = 2;
+            const sectionPred = await extraModel.predict(tensor).data();
+            sectionPred.forEach((valy, idxy) => {
+              if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+              });
+          }
+           else if (${pageCategories[idx]) =='decisionpage'){
+            var idi = 3;
+            const sectionPred = await decisionpageModel.predict(tensor).data();
+            sectionPred.forEach((valy, idxy) => {
+              if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+              });
+           }
+          else if (${pageCategories[idx]) =='steppage'){
+            var idi = 4;
+            const sectionPred = await steppageModel.predict(tensor).data();
+            sectionPred.forEach((valy, idxy) => {
+              if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+              });
+          }
+
+          const sectionPred = await sectionModel.predict(tensor).data();
         });
 
-        sectionPred.forEach((val, idx) => {
-          if (val > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idx]} (${val.toFixed(2)})\n`;
-        });
+        //sectionPred.forEach((val, idx) => {
+        //  if (val > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idx]} (${val.toFixed(2)})\n`;
+       // });
 
         tf.dispose([tensor]);
       }
