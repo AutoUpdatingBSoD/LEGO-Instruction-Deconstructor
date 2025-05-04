@@ -55,7 +55,9 @@
       const steppageModel = await tf.loadLayersModel('/LSBPSE/model/section_type/steppage-model.json');
       return { pageModel, finishModel, indexModel, extraModel, decisionpage, steppageModel };
     }
-
+    async function predictModel(model, tensor){
+        return await model.predict(tensor).data();
+    }
     // Utility: get canvas from a PDF page
     async function renderPageToCanvas(pdfPage) {
       const viewport = pdfPage.getViewport({ scale: 2 });
@@ -93,43 +95,42 @@
         // Format multi-label output
         pagePred.forEach((val, idx) => {
           if (val > 0.5) log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
-            if (${pageCategories[idx]} == "finish"){
-            var idi = 0;
-            const sectionPred = await finishModel.predict(tensor).data();
-            sectionPred.forEach((valy, idxy) => {
-              if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
-              });
+          if (pageCategories[idx] === "finish"){
+          var idi = 0;
+          const sectionPred = predictModel(finishModel, tensor);
+          sectionPred.forEach((valy, idxy) => {
+            if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+            });
           }
-          else if (${pageCategories[idx]} == 'index'){
+          else if (pageCategories[idx] === 'index'){
             var idi = 1;
-            const sectionPred = await indexModel.predict(tensor).data();
+            const sectionPred = predictModel(indexModel, tensor);
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
           }
-          else if (${pageCategories[idx]} == 'extra'){
+          else if (pageCategories[idx] === 'extra'){
             var idi = 2;
-            const sectionPred = await extraModel.predict(tensor).data();
+            const sectionPred = predictModel(extraModel, tensor);
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
           }
-           else if (${pageCategories[idx]} =='decisionpage'){
+           else if (pageCategories[idx] === 'decisionpage'){
             var idi = 3;
-            const sectionPred = await decisionpageModel.predict(tensor).data();
+            const sectionPred = predictModel(decisionpageModel, tensor);
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
            }
-          else if (${pageCategories[idx]} =='steppage'){
+          else if (pageCategories[idx] === 'steppage'){
             var idi = 4;
-            const sectionPred = await steppageModel.predict(tensor).data();
+            const sectionPred = predictModel(steppageModel, tensor);
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
           }
 
-          const sectionPred = await sectionModel.predict(tensor).data();
         });
 
         //sectionPred.forEach((val, idx) => {
