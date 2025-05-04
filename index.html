@@ -53,7 +53,7 @@
       const finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
       const indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
       const extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
-      const decisionpage =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
+      const decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
       const steppageModel = await tf.loadLayersModel(prefix+'/model/section_type/steppage-model.json');
       return { pageModel, finishModel, indexModel, extraModel, decisionpage, steppageModel };
     }
@@ -98,29 +98,40 @@
         for (let idx = 0; idx < pagePred.length; idx++) {
           const val = pagePred[idx];
           if (val > 0.5) log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
+
+          let idi = null;
+          let sectionPred = null;
+
           switch (pageCategories[idx]) {
-          case "finish":
-            sectionPred = await predictModel(finishModel, tensor);
-            break;
-          case "index":
-            sectionPred = await predictModel(indexModel, tensor);
-            break;
-          case "extra":
-            sectionPred = await predictModel(extraModel, tensor);
-            break;
-          case "decisionpage":
-            sectionPred = await predictModel(decisionpage, tensor);
-            break;
-          case "steppage":
-            sectionPred = await predictModel(steppageModel, tensor);
-            break;
-          default:
-            sectionPred = null;
+            case "finish":
+              idi = 0;
+              sectionPred = await predictModel(finishModel, tensor);
+              break;
+            case "index":
+              idi = 1;
+              sectionPred = await predictModel(indexModel, tensor);
+              break;
+            case "extra":
+              idi = 2;
+              sectionPred = await predictModel(extraModel, tensor);
+              break;
+            case "decisionpage":
+              idi = 3;
+              sectionPred = await predictModel(decisionpage, tensor);
+              break;
+            case "steppage":
+              idi = 4;
+              sectionPred = await predictModel(steppageModel, tensor);
+              break;
+            default:
+              sectionPred = null;
+              break;
+          }
         }
         if (sectionPred) {
           sectionPred.forEach((valy, idxy) => {
             if (valy > 0.5) {
-              log.textContent += `   - SECTION: ${sectionCategories[idx][idxy]} (${valy.toFixed(2)})\n`;
+              log.textContent += `   - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
             }
           });
         }
