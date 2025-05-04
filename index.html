@@ -93,35 +93,35 @@
         // Format multi-label output
         pagePred.forEach((val, idx) => {
           if (val > 0.5) log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
-            if (${pageCategories[idx]) == "finish"){
+            if (${pageCategories[idx]} == "finish"){
             var idi = 0;
             const sectionPred = await finishModel.predict(tensor).data();
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
           }
-          else if (${pageCategories[idx]) == 'index'){
+          else if (${pageCategories[idx]} == 'index'){
             var idi = 1;
             const sectionPred = await indexModel.predict(tensor).data();
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
           }
-          else if (${pageCategories[idx]) == 'extra'){
+          else if (${pageCategories[idx]} == 'extra'){
             var idi = 2;
             const sectionPred = await extraModel.predict(tensor).data();
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
           }
-           else if (${pageCategories[idx]) =='decisionpage'){
+           else if (${pageCategories[idx]} =='decisionpage'){
             var idi = 3;
             const sectionPred = await decisionpageModel.predict(tensor).data();
             sectionPred.forEach((valy, idxy) => {
               if (valy > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
               });
            }
-          else if (${pageCategories[idx]) =='steppage'){
+          else if (${pageCategories[idx]} =='steppage'){
             var idi = 4;
             const sectionPred = await steppageModel.predict(tensor).data();
             sectionPred.forEach((valy, idxy) => {
