@@ -12,7 +12,30 @@
     <pre id="log"></pre>
 
     <script>
-    const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
+
+    
+// Example values
+const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
+const NUM_CLASSES = pageCategories.length;
+
+// Build model
+function buildPageModel(is) {
+  const model = tf.sequential();
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
+  model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+  model.add(tf.layers.flatten());
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
+
+  model.compile({
+    optimizer: tf.train.adam(),
+    loss: 'categoricalCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
+}
+
     const sectionCategories = [
         ['pageno'],
         ['pageno', 'part', 'repeat'],
@@ -61,7 +84,15 @@ async function processImage(img) {
             .expandDims();
     });
 }
-
+async function processImageS(img) {
+    return tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+            .resizeNearestNeighbor([64, 64]) // Resize to 64x64
+            .toFloat()
+            .div(255.0)
+            .expandDims(0) // Add batch dimension
+    });
+}
 function buildModel(outputSize) {
     const model = tf.sequential();
 
@@ -126,7 +157,7 @@ async function trainModels() {
             for (let m = 1; m <= count; m++) {
                 const path = `${imageDir}/${categoryS}/${categoryS} ${m}.png`;
                 const img = await loadImage(path);
-                const tensor = await processImage(img);
+                const tensor = await processImageS(img);
                 tempXs.push(tensor);
 
                 // Assign multi-label based on index or rules
@@ -150,31 +181,50 @@ async function trainModels() {
 
     log.textContent += "Done\n";
 
-    const pageModel = buildModel(pageCategories.length);
+    const pageModel = buildPageModel(pageCategories.length);
     await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
-        epochs: 200,
-        callbacks: tf.callbacks.earlyStopping({
-            monitor: 'loss',
-            patience: 10,
-            restoreBestWeight: true
-        })
-    });
+    epochs: 200,
+    batchSize: 32,
+    shuffle: true,
+    validationSplit: 0.1,
+    callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
+  });
     await pageModel.save('downloads://page-model');
 
     for (let i = 0; i < sectionCategories.length; i++) {
-        const sectionModel = buildModel(sectionCategories[i].length);
+        const sectionModel = buildSectionModel(sectionCategories[i].length);
+
         await sectionModel.fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
             epochs: 200,
-            callbacks: tf.callbacks.earlyStopping({
-                monitor: 'loss',
-                patience: 10,
-                restoreBestWeight: true
-            })
-        });
+            batchSize: 32,
+            shuffle: true,
+            validationSplit: 0.1,
+            callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
+  });
         await sectionModel.save('downloads://' + pageCategories[i] + '-model');
     }
 
     log.textContent += 'Models trained and saved!';
+}
+
+
+
+// Build section model
+function buildSectionModel(is) {
+  const model = tf.sequential();
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
+  model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+  model.add(tf.layers.flatten());
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: is, activation: 'sigmoid' }));
+
+  model.compile({
+    optimizer: tf.train.adam(),
+    loss: 'binaryCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
 }
 
 trainModels();
