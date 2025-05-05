@@ -1,103 +1,72 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>PDF Testing</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <meta charset="UTF-8" />
+  <title>LEGO Page & Section Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    canvas { display: none; }
+    #results { margin-top: 20px; }
+    .page-block { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+  </style>
 </head>
 <body>
-  <h2>Upload PDF for Model Testing</h2>
-  <input type="file" id="pdf-upload" accept="application/pdf">
-  <pre id="log">Awaiting file upload...</pre>
+  <h1>LEGO PDF Page & Section Classifier</h1>
+  <input type="file" id="pdfUpload" accept=".pdf" />
+  <div id="results"></div>
 
   <script>
-    const log = document.getElementById("log");
-
-    // Dummy categories — replace with your actual arrays
-    const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
-    const sectionCategories = [
+    const pageLabels = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
+    const sectionLabels = [
         ['pageno'],
-        ['pageno', 'part',
-        'repeat'],
+        ['pageno', 'part', 'repeat'],
         ['pageno'],
         ['pageno', 'splitdecision'],
-        ['bagset', 'dontreadrepeat', 'pageno', 'part',
-        'partstep', 'repeat', 'subbuild'],
-        
+        ['bagset', 'dontreadrepeat', 'pageno', 'part', 'partstep', 'repeat', 'subbuild'],
     ];
-    const imageDir = 'model/dataset';
-    const indicesp = [2, 4, 66, 2, 346]
-    const indicess = [
-        [4],
-        [4, 26, 4],
-        [4],
-        [4, 2],
-        [5, 2, 4, 26, 18, 4, 6]];
+    let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
 
-    // Your existing function to preprocess the image
-    async function processImage(img) {
-      return tf.tidy(() => {
-        const tensor = tf.browser.fromPixels(img)
-          .resizeNearestNeighbor([64, 64])
-          .toFloat()
-          .div(255.0);
-        return tensor.expandDims(0);
-      });
-    }
-
-    // Example model loader — swap with your trained models if needed
     async function loadModels() {
-      const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
-      //const prefix = "https://github.com/AutoUpdatingBSoD/LSBPSE";
-      // /const prefix = "";
-      const pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
-      const finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
-      const indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
-      const extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
-      const decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
-      const steppageModel = await tf.loadLayersModel(prefix+'/model/section_type/steppage-model.json');
-      return { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel };
+      const prefix = "https://github.com/AutoUpdatingBSoD/LSBPSE";
+      pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
+      finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
+      indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
+      extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
+      decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
+      steppageModel = await tf.loadLayersModel(prefix+'/model/section_type/steppage-model.json');
+      console.log('Models loaded');
     }
-    async function predictModel(model, tensor){
-        return await model.predict(tensor).data();
-    }
-    // Utility: get canvas from a PDF page
-    async function renderPageToCanvas(pdfPage) {
-      const viewport = pdfPage.getViewport({ scale: 2 });
+
+    async function handlePDF(file) {
+      const pdfData = new Uint8Array(await file.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+
       const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const context = canvas.getContext('2d');
-      await pdfPage.render({ canvasContext: context, viewport: viewport }).promise;
-      return canvas;
-    }
+      const ctx = canvas.getContext('2d');
 
-    document.getElementById("pdf-upload").addEventListener("change", async function (e) {
-      const file = e.target.files[0];
-      if (!file || file.type !== "application/pdf") {
-        log.textContent = "Please upload a valid PDF.";
-        return;
-      }
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 });
 
-      log.textContent = `Loading models and reading PDF...\n`;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
 
-      const { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel } = await loadModels();
-      const fileURL = URL.createObjectURL(file);
-      const pdf = await pdfjsLib.getDocument(fileURL).promise;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const imgTensor = tf.browser.fromPixels(canvas)
+          .resizeNearestNeighbor([224, 224])
+          .toFloat()
+          .div(255)
+          .expandDims(0);
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const canvas = await renderPageToCanvas(page);
-        const tensor = await processImage(canvas);
-
-        const pagePred = await pageModel.predict(tensor).data();
+        // PAGE PREDICTION (Single label)
+        const pagePred = pageModel.predict(imgTensor);
+        const pageIndex = (await pagePred.argMax(-1).data());
+        const pageLabel = pageLabels[pageIndex];
         
-
-        log.textContent += `\nPage ${i} predictions:\n`;
-
-        // Format multi-label output
         for (let idx = 0; idx < pagePred.length; idx++) {
-          const val = pagePred[idx];
+          const val = pageIndex[idx];
           if (val > 0.5) {
             log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
           
@@ -127,27 +96,60 @@
                 break;
             }
           
-            if (sectionPred) {
-              sectionPred.forEach((valy, idxy) => {
-                if (valy > 0.5) {
-                  log.textContent += `   - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
+
+          }
+        }
+        // SECTION PREDICTION (Multi-label)
+        const sectionCounts = {};
+        if (sectionPred) {
+              sectionPred.forEach((prob, i) => {
+                if (prob > 0.5) {
+                  const label = sectionLabels[i];
+                  sectionCounts[label] = (sectionCounts[label] || 0) + 1;
                 }
               });
             }
-          }
+
+        displayResults(pageNum, pageLabel, sectionCounts);
+        tf.dispose([imgTensor, pagePred, sectionPred]);
+      }
+    }
+    async function renderPageToCanvas(pdfPage) {
+      const viewport = pdfPage.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const context = canvas.getContext('2d');
+      await pdfPage.render({ canvasContext: context, viewport: viewport }).promise;
+      return canvas;
+    }
+
+    function displayResults(pageNum, pageLabel, sectionCounts) {
+      const container = document.getElementById('results');
+      const block = document.createElement('div');
+      block.className = 'page-block';
+
+      let html = `<strong>Page ${pageNum}:</strong> ${pageLabel}<br>`;
+      if (Object.keys(sectionCounts).length > 0) {
+        html += '<em>Sections:</em><br>';
+        for (const [label, count] of Object.entries(sectionCounts)) {
+          html += `&nbsp;&nbsp;- ${label}: ${count}<br>`;
         }
-
-
-        //sectionPred.forEach((val, idx) => {
-        //  if (val > 0.5) log.textContent += ` - SECTION: ${sectionCategories[idx]} (${val.toFixed(2)})\n`;
-       // });
-
-        tf.dispose([tensor]);
+      } else {
+        html += '<em>No section categories detected above threshold.</em>';
       }
 
-      log.textContent += `\nDone processing all pages.`;
+      block.innerHTML = html;
+      container.appendChild(block);
+    }
+
+    document.getElementById('pdfUpload').addEventListener('change', async (e) => {
+      document.getElementById('results').innerHTML = '';
+      const file = e.target.files[0];
+      if (!file) return;
+      await loadModels();
+      await handlePDF(file);
     });
   </script>
 </body>
 </html>
-
