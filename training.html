@@ -15,15 +15,12 @@
     const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
     const sectionCategories = [
         ['pageno'],
-        ['pageno', 'part',
-        'repeat'],
+        ['pageno', 'part', 'repeat'],
         ['pageno'],
         ['pageno', 'splitdecision'],
-        ['bagset', 'dontreadrepeat', 'pageno', 'part',
-        'partstep', 'repeat', 'subbuild'],
-        
+        ['bagset', 'dontreadrepeat', 'pageno', 'part', 'partstep', 'repeat', 'subbuild'],
     ];
-    const imageDir = 'model/dataset';
+    const imageDir = 'https://autoupdatingbsod.github.io/LSBPSE/model/dataset';
     const indicesp = [2, 4, 66, 2, 346]
     const indicess = [
         [4],
@@ -31,7 +28,8 @@
         [4],
         [4, 2],
         [5, 2, 4, 26, 18, 4, 6]];
-          const backends = ['webgl', 'wasm', 'cpu'];
+const backends = ['webgl', 'wasm', 'cpu'];
+
 async function loadbackend(){
   for (const backend of backends) {
     try {
@@ -45,27 +43,26 @@ async function loadbackend(){
   }
 }
 
-    //alert(indices[0]);
-    async function loadImage(src) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => resolve(img);
-            img.src = src;
-        });
-    }
+async function loadImage(src) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.src = src;
+    });
+}
 
-    async function processImage(img) {
-        return tf.tidy(() => {
-            return tf.browser.fromPixels(img)
-                .resizeNearestNeighbor([64, 64])
-                .toFloat()
-                .div(255.0)
-                .expandDims();
-        });
-    }
+async function processImage(img) {
+    return tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+            .resizeNearestNeighbor([64, 64])
+            .toFloat()
+            .div(255.0)
+            .expandDims();
+    });
+}
 
-    function buildModel(outputSize) {
+function buildModel(outputSize) {
     const model = tf.sequential();
 
     model.add(tf.layers.conv2d({
@@ -76,158 +73,111 @@ async function loadbackend(){
     }));
     model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
     model.add(tf.layers.flatten());
-
-    // Optional hidden dense layer
-    model.add(tf.layers.dense({
-        units: 64,
-        activation: 'relu'
-    }));
-
-    // Final output layer
-    model.add(tf.layers.dense({
-        units: outputSize,
-        activation: 'sigmoid' // Use sigmoid for multi-label output
-    }));
+    model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+    model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid' }));
 
     model.compile({
-        loss: 'binaryCrossentropy', // Use this for multi-label problems
+        loss: 'binaryCrossentropy',
         optimizer: 'adam',
         metrics: ['accuracy']
     });
 
     return model;
-    }
+}
 
-    function getLabelVectorP(label, categories) {
-            const labelVector = new Array(categories.length).fill(0);
-            switch (label) {
-            case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; break;
-            case 2: labelVector[2] = 1; break;
-            case 3: labelVector[3] = 1; break;
-            case 4: labelVector[4] = 1; break;
-            }
-        return labelVector;
+function createMultiLabelVector(labels, categoryCount) {
+    const vector = new Array(categoryCount).fill(0);
+    for (const label of labels) {
+        if (label >= 0 && label < categoryCount) {
+            vector[label] = 1;
+        }
     }
-       function getLabelVectorS(label, categories) {
-            const labelVector = new Array(categories.length).fill(0);
-            switch (label) {
-            case 0: labelVector[0] = 1; break;
-            }
-        return labelVector;
-    }
-    function getLabelVectorS2(label, categories) {
-            const labelVector = new Array(categories.length).fill(0);
-            switch (label) {
-            case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; labelVector[2] = 1; break;
-            case 2: labelVector[2] = 1; break;
-            }
-        return labelVector;
-    }
-    function getLabelVectorS4(label, categories) {
-            const labelVector = new Array(categories.length).fill(0);
-            switch (label) {
-            case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; break;
-            }
-        return labelVector;
-    }
-        function getLabelVectorS5(label, categories) {
-            const labelVector = new Array(categories.length).fill(0);
-            switch (label) {
-            case 0: labelVector[0] = 1; break;
-            case 1: labelVector[1] = 1; break;
-            case 2: labelVector[2] = 1; break;
-            case 3: labelVector[3] = 1; labelVector[5] = 1; break;
-            case 4: labelVector[4] = 1; labelVector[5] = 1; break;
-            case 5: labelVector[5] = 1; break;
-            case 6: labelVector[6] = 1; labelVector[1] = 1; break;
-            }
-        return labelVector;
-    }
-    async function trainModels() {
-        const log = document.getElementById('log');
-        log.textContent = 'Loading images...\n';
-        loadbackend();
-        const pageXs = [], pageYs = [];
-        const sectionXs = [], sectionYs = [];
-        //console.log(indices[0]);
-        for (let i = 0; i < indicesp.length; i++) {
-            let label = i;
-            let category = pageCategories[label];
-                for (let j = 1; j <= indicesp[i]; j++){
-                    
-                const path = `${imageDir}/${category}/${category} ${j}.png`;
+    return vector;
+}
+
+async function trainModels() {
+    const log = document.getElementById('log');
+    log.textContent = 'Loading images...\n';
+    await loadbackend();
+
+    const pageXs = [], pageYs = [], sectionXs = [], sectionYs = [];
+
+    for (let i = 0; i < indicesp.length; i++) {
+        const label = i;
+        const category = pageCategories[label];
+
+        for (let j = 1; j <= indicesp[i]; j++) {
+            const path = `${imageDir}/${category}/${category} ${j}.png`;
+            const img = await loadImage(path);
+            const tensor = await processImage(img);
+
+            pageXs.push(tensor);
+            pageYs.push(createMultiLabelVector([label], pageCategories.length));
+        }
+        log.textContent += 'Loaded ' + category + '\n';
+
+        const sectioni = indicess[i];
+        const tempXs = [], tempYs = [];
+
+        for (let l = 0; l < sectioni.length; l++) {
+            const categoryS = sectionCategories[i][l];
+            const count = sectioni[l];
+
+            for (let m = 1; m <= count; m++) {
+                const path = `${imageDir}/${categoryS}/${categoryS} ${m}.png`;
                 const img = await loadImage(path);
                 const tensor = await processImage(img);
-    
-                    pageXs.push(tensor);
-                    pageYs.push(getLabelVectorP(label, pageCategories));
-                //log.textContent += `Loaded image ${i + 1} as ${label}\n`;
-            }
-                                log.textContent += 'Loaded '+category+'\n';
-                let sectioni = indicess[i];
-                const tempXs = [], tempYs = [];
-                for (let l = 0; l < sectioni.length; l++){
-                    let labelS = sectioni[l];
-                    let categoryS = sectionCategories[i][l];
-                    for (let m = 1; m <= labelS; m++){
-                        const path = `${imageDir}/${categoryS}/${categoryS} ${m}.png`;
-                        const img = await loadImage(path);
-                        const tensor = await processImage(img);
-                        tempXs.push(tensor);
-                        if (i == 4){
-                            tempYs.push(getLabelVectorS5(l, sectionCategories[i]));
-                        }
-                        else if (i == 1){
-                            tempYs.push(getLabelVectorS2(l, sectionCategories[i]));
-                        }
-                        else if (i == 3){
-                            tempYs.push(getLabelVectorS4(l, sectionCategories[i]));
-                        }
-                        else{
-                            tempYs.push(getLabelVectorS(l, sectionCategories[i]));
-                        }
-                        
+                tempXs.push(tensor);
 
-                    }
-                    log.textContent += 'Loaded '+categoryS+' of '+category+'\n';
+                // Assign multi-label based on index or rules
+                let multiLabel;
+                if (i === 4) {
+                    multiLabel = createMultiLabelVector([l, 1], sectionCategories[i].length);
+                } else if (i === 1) {
+                    multiLabel = createMultiLabelVector([l, 2], sectionCategories[i].length);
+                } else if (i === 3) {
+                    multiLabel = createMultiLabelVector([l], sectionCategories[i].length);
+                } else {
+                    multiLabel = createMultiLabelVector([l], sectionCategories[i].length);
                 }
-            console.log(tempXs.length);
-            console.log(tempYs.length);
-            sectionXs.push(tempXs);
-            sectionYs.push(tempYs);
+                tempYs.push(multiLabel);
+            }
+            log.textContent += 'Loaded ' + categoryS + ' of ' + category + '\n';
         }
-        log.textContent += "Done\n";
-        const pageModel = buildModel(pageCategories.length);
-        await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
-  epochs: 200,
-  callbacks: tf.callbacks.earlyStopping({
-    monitor: 'loss',
-    patience: 10,
-    restoreBestWeight: true
-  })
-});
-        await pageModel.save('downloads://page-model');
-        for (let i = 0; i < sectionCategories.length; i++){
-            //alert(sectionCategories[i].length);
-         const sectionModel = buildModel(sectionCategories[i].length);
-            
-        await sectionModel.fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
-          epochs: 200,
-          callbacks: tf.callbacks.earlyStopping({
+        sectionXs.push(tempXs);
+        sectionYs.push(tempYs);
+    }
+
+    log.textContent += "Done\n";
+
+    const pageModel = buildModel(pageCategories.length);
+    await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
+        epochs: 200,
+        callbacks: tf.callbacks.earlyStopping({
             monitor: 'loss',
             patience: 10,
             restoreBestWeight: true
-          })
-        });
-            await sectionModel.save('downloads://'+pageCategories[i]+'-model');
-        }
+        })
+    });
+    await pageModel.save('downloads://page-model');
 
-        log.textContent += 'Models trained and saved!';
+    for (let i = 0; i < sectionCategories.length; i++) {
+        const sectionModel = buildModel(sectionCategories[i].length);
+        await sectionModel.fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
+            epochs: 200,
+            callbacks: tf.callbacks.earlyStopping({
+                monitor: 'loss',
+                patience: 10,
+                restoreBestWeight: true
+            })
+        });
+        await sectionModel.save('downloads://' + pageCategories[i] + '-model');
     }
-        trainModels();
+
+    log.textContent += 'Models trained and saved!';
+}
+
+trainModels();
     </script>
 </body>
 </html>
