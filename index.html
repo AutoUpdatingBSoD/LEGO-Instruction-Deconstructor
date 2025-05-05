@@ -29,7 +29,7 @@
     let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
 
     async function loadModels() {
-      const prefix = "https://github.com/AutoUpdatingBSoD/LSBPSE";
+      const prefix = "https://autoupdatingbsod.github.io//LSBPSE";
       pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
       finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
       indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
