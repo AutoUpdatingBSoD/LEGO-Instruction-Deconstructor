@@ -29,7 +29,7 @@
     let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
 
     async function loadModels() {
-      const prefix = "https://autoupdatingbsod.github.io//LSBPSE";
+      const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
       pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
       finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
       indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
@@ -55,7 +55,7 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
         const imgTensor = tf.browser.fromPixels(canvas)
-          .resizeNearestNeighbor([224, 224])
+          .resizeNearestNeighbor([64, 64])
           .toFloat()
           .div(255)
           .expandDims(0);
@@ -64,14 +64,14 @@
         const pagePred = pageModel.predict(imgTensor);
         const pageIndex = (await pagePred.argMax(-1).data());
         const pageLabel = pageLabels[pageIndex];
-        
+        let sectionPred = null;
         for (let idx = 0; idx < pagePred.length; idx++) {
           const val = pageIndex[idx];
           if (val > 0.5) {
             log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
           
             let idi = null;
-            let sectionPred = null;
+
           
             switch (pageCategories[idx]) {
               case "finish":
