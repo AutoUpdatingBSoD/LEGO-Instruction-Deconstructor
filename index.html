@@ -55,18 +55,18 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
         const imgTensor = tf.browser.fromPixels(canvas)
-          .resizeNearestNeighbor([64, 64])
-          .toFloat()
-          .div(255)
-          .expandDims(0);
+  .resizeNearestNeighbor([64, 64])
+  .toFloat()
+  .div(255.0)
+  .expandDims(0);
+
 
         // PAGE PREDICTION (Single label)
         const pagePred = pageModel.predict(imgTensor);
         const pageIndex = (await pagePred.argMax(-1).data());
         const pageLabel = pageLabels[pageIndex];
         let sectionPred = null;
-        for (let idx = 0; idx < pagePred.length; idx++) {
-          const val = pageIndex[idx];
+
           if (val > 0.5) {
             log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
           
@@ -95,9 +95,6 @@
                 sectionPred = await predictModel(steppageModel, tensor);
                 break;
             }
-          
-
-          }
         }
         // SECTION PREDICTION (Multi-label)
         const sectionCounts = {};
