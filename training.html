@@ -186,8 +186,7 @@ async function trainModels() {
     log.textContent += "Done\n";
 
     const pageModel = buildPageModel(pageCategories.length);
-    await pageModel.fit(tf.concat(pageXs), tf.tensor1d(pageYs, 'int32'), {
-
+    await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
     epochs: 200,
     batchSize: 32,
     shuffle: true,
