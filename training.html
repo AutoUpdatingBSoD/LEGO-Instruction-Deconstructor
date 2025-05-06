@@ -59,10 +59,10 @@ async function loadbackend(){
     try {
       await tf.setBackend(backend);
       await tf.ready();
-      console.log(Using backend: ${backend});
+      console.log('Using backend: ${backend}');
       break;
     } catch (e) {
-      console.warn(Backend ${backend} not available:, e);
+      console.warn('Backend ${backend} not available:, e');
     }
   }
 }
@@ -142,7 +142,7 @@ async function trainModels() {
         const category = pageCategories[label];
 
         for (let j = 1; j <= indicesp[i]; j++) {
-            const path = ${imageDir}/${category}/${category} ${j}.png;
+            const path = '${imageDir}/${category}/${category} ${j}'.png;
             const img = await loadImage(path);
             const tensor = await processImage(img);
 
@@ -159,7 +159,7 @@ async function trainModels() {
             const count = sectioni[l];
 
             for (let m = 1; m <= count; m++) {
-                const path = '${imageDir}/${categoryS}/${categoryS} ${m}''.png;
+                const path = '${imageDir}/${categoryS}/${categoryS} ${m}'.png;
                 const img = await loadImage(path);
                 const tensor = await processImageS(img);
                 tempXs.push(tensor);
