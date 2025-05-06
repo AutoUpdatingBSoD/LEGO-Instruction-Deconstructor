@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -58,10 +59,10 @@ async function loadbackend(){
     try {
       await tf.setBackend(backend);
       await tf.ready();
-      console.log(`Using backend: ${backend}`);
+      console.log(Using backend: ${backend});
       break;
     } catch (e) {
-      console.warn(`Backend ${backend} not available:`, e);
+      console.warn(Backend ${backend} not available:, e);
     }
   }
 }
@@ -78,19 +79,21 @@ async function loadImage(src) {
 async function processImage(img) {
     return tf.tidy(() => {
         return tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([64, 64])
-            .toFloat()
-            .div(255.0)
-            .expandDims();
+  .resizeNearestNeighbor([64, 64])
+  .toFloat()
+  .div(255.0)
+  .expandDims(0);
+
     });
 }
 async function processImageS(img) {
     return tf.tidy(() => {
         return tf.browser.fromPixels(img)
-            .resizeNearestNeighbor([64, 64]) // Resize to 64x64
-            .toFloat()
-            .div(255.0)
-            .expandDims(0) // Add batch dimension
+  .resizeNearestNeighbor([64, 64])
+  .toFloat()
+  .div(255.0)
+  .expandDims(0);
+
     });
 }
 function buildModel(outputSize) {
@@ -105,13 +108,14 @@ function buildModel(outputSize) {
     model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
     model.add(tf.layers.flatten());
     model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid' }));
+    model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
 
-    model.compile({
-        loss: 'binaryCrossentropy',
-        optimizer: 'adam',
-        metrics: ['accuracy']
-    });
+model.compile({
+  optimizer: tf.train.adam(),
+  loss: 'sparseCategoricalCrossentropy', // NEW
+  metrics: ['accuracy']
+});
+
 
     return model;
 }
@@ -138,7 +142,7 @@ async function trainModels() {
         const category = pageCategories[label];
 
         for (let j = 1; j <= indicesp[i]; j++) {
-            const path = `${imageDir}/${category}/${category} ${j}.png`;
+            const path = ${imageDir}/${category}/${category} ${j}.png;
             const img = await loadImage(path);
             const tensor = await processImage(img);
 
@@ -155,7 +159,7 @@ async function trainModels() {
             const count = sectioni[l];
 
             for (let m = 1; m <= count; m++) {
-                const path = `${imageDir}/${categoryS}/${categoryS} ${m}.png`;
+                const path = '${imageDir}/${categoryS}/${categoryS} ${m}''.png;
                 const img = await loadImage(path);
                 const tensor = await processImageS(img);
                 tempXs.push(tensor);
@@ -182,7 +186,8 @@ async function trainModels() {
     log.textContent += "Done\n";
 
     const pageModel = buildPageModel(pageCategories.length);
-    await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
+    await pageModel.fit(tf.concat(pageXs), tf.tensor1d(pageYs, 'int32'), {
+
     epochs: 200,
     batchSize: 32,
     shuffle: true,
