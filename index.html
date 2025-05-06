@@ -27,7 +27,9 @@
         ['bagset', 'dontreadrepeat', 'pageno', 'part', 'partstep', 'repeat', 'subbuild'],
     ];
     let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
-
+    async function predictModel(model, tensor){
+        return await model.predict(tensor).data();
+    }
     async function loadModels() {
       const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
       pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
@@ -38,7 +40,6 @@
       steppageModel = await tf.loadLayersModel(prefix+'/model/section_type/steppage-model.json');
       console.log('Models loaded');
     }
-
     async function handlePDF(file) {
       const pdfData = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
@@ -55,46 +56,47 @@
 
         await page.render({ canvasContext: ctx, viewport }).promise;
         const imgTensor = tf.browser.fromPixels(canvas)
-  .resizeNearestNeighbor([64, 64])
-  .toFloat()
-  .div(255.0)
-  .expandDims(0);
-
+          .resizeNearestNeighbor([64, 64])
+          .toFloat()
+          .div(255)
+          .expandDims(0);
 
         // PAGE PREDICTION (Single label)
         const pagePred = pageModel.predict(imgTensor);
         const pageIndex = (await pagePred.argMax(-1).data());
         const pageLabel = pageLabels[pageIndex];
-        let sectionPred = null;
-
+                    let sectionPred = null;
+          const val = pageIndex;
           if (val > 0.5) {
-            log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
+            //document.getElementById('results').innerHTML +=  '- PAGE: '+pageLabel+' '+(val)+'\n';
           
             let idi = null;
 
           
-            switch (pageCategories[idx]) {
+            switch (pageLabel) {
               case "finish":
                 idi = 0;
-                sectionPred = await predictModel(finishModel, tensor);
+                sectionPred = await predictModel(finishModel, imgTensor);
                 break;
               case "index":
                 idi = 1;
-                sectionPred = await predictModel(indexModel, tensor);
+                sectionPred = await predictModel(indexModel, imgTensor);
                 break;
               case "extra":
                 idi = 2;
-                sectionPred = await predictModel(extraModel, tensor);
+                sectionPred = await predictModel(extraModel, imgTensor);
                 break;
               case "decisionpage":
                 idi = 3;
-                sectionPred = await predictModel(decisionpageModel, tensor);
+                sectionPred = await predictModel(decisionpageModel, imgTensor);
                 break;
               case "steppage":
                 idi = 4;
-                sectionPred = await predictModel(steppageModel, tensor);
+                sectionPred = await predictModel(steppageModel, imgTensor);
                 break;
             }
+          
+
         }
         // SECTION PREDICTION (Multi-label)
         const sectionCounts = {};
@@ -103,6 +105,7 @@
                 if (prob > 0.5) {
                   const label = sectionLabels[i];
                   sectionCounts[label] = (sectionCounts[label] || 0) + 1;
+                  //document.getElementById('results').innerHTML +=  '- SECTION(s): '+label+' appeared '+sectionCounts+' times\n';
                 }
               });
             }
@@ -126,11 +129,11 @@
       const block = document.createElement('div');
       block.className = 'page-block';
 
-      let html = `<strong>Page ${pageNum}:</strong> ${pageLabel}<br>`;
+      let html = '<strong>Page '+pageNum+':</strong> '+pageLabel+'<br>';
       if (Object.keys(sectionCounts).length > 0) {
         html += '<em>Sections:</em><br>';
         for (const [label, count] of Object.entries(sectionCounts)) {
-          html += `&nbsp;&nbsp;- ${label}: ${count}<br>`;
+          html += '&nbsp;&nbsp;- '+label+': '+count+'<br>';
         }
       } else {
         html += '<em>No section categories detected above threshold.</em>';
