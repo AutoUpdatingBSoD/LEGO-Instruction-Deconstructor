@@ -18,6 +18,21 @@
   <div id="results"></div>
 
   <script>
+    const finishResponse = await fetch('https://serverless.roboflow.com/infer/workflows/lego-training-set/detect-count-and-visualize-2', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        api_key: 'VE2nsZZg4DqoHvGWCfRt',
+        inputs: {
+            "image": {"type": "url", "value": "IMAGE_URL"}
+        }
+    })
+});
+
+const result = await response.json();
+console.log(result);
     const pageLabels = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
     const sectionLabels = [
         ['pageno'],
@@ -33,7 +48,7 @@
     async function loadModels() {
       const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
       pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
-      finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
+      finishModel =   await tf.loadLayersModel(finishResponse);
       indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
       extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
       decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
