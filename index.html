@@ -19,21 +19,25 @@
   <div id="results"></div>
 
   <script>
-    const steppageResponse = await fetch('https://serverless.roboflow.com/infer/workflows/lego-training-set/detect-count-and-visualize-2', {
+let steppageResult = null;
+
+async function fetchSteppageModel() {
+  const steppageResponse = await fetch('https://serverless.roboflow.com/infer/workflows/lego-training-set/detect-count-and-visualize-2', {
     method: 'POST',
     headers: {
-        'Content-Type': 'application/json'
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-        api_key: 'VE2nsZZg4DqoHvGWCfRt',
-        inputs: {
-            "image": {"type": "url", "value": "IMAGE_URL"}
-        }
+      api_key: 'VE2nsZZg4DqoHvGWCfRt',
+      inputs: {
+        image: { type: "url", value: "IMAGE_URL" }
+      }
     })
-});
+  });
 
-const steppageResult = await steppageResponse.json();
-console.log(result);
+  steppageResult = await steppageResponse.json();
+  console.log(steppageResult);
+}
     const pageLabels = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
     const sectionLabels = [
         ['pageno'],
@@ -47,12 +51,13 @@ console.log(result);
         return await model.predict(tensor).data();
     }
     async function loadModels() {
+      await fetchSteppageModel();
       const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
       pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
       finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
       indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
       extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
-      decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
+      decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json')
       steppageModel = await tf.loadLayersModel(steppageResult);
       console.log('Models loaded');
     }
