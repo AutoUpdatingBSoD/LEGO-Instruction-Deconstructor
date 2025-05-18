@@ -1,30 +1,52 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>PDF Testing</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <meta charset="UTF-8" />
+  <title>LEGO Page & Section Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    canvas { display: none; }
+    #results { margin-top: 20px; }
+    .page-block { margin-bottom: 20px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+  </style>
 </head>
 <body>
-  <h2>Upload PDF for Model Testing</h2>
-  <input type="file" id="pdf-upload" accept="application/pdf">
-  <pre id="log">Awaiting file upload...</pre>
+  <h1>LEGO PDF Page & Section Classifier</h1>
+  <input type="file" id="pdfUpload" accept=".pdf" />
+  <div id="results"></div>
 
   <script>
-    const log = document.getElementById("log");
+let steppageResult = null;
 
-    // Dummy categories — replace with your actual arrays
-    const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
-    const sectionCategories = [
+async function fetchSteppageModel() {
+  const steppageResponse = await fetch('https://serverless.roboflow.com/infer/workflows/lego-training-set/detect-count-and-visualize-2', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      api_key: 'VE2nsZZg4DqoHvGWCfRt',
+      inputs: {
+        image: { type: "url", value: "IMAGE_URL" }
+      }
+    })
+  });
+
+  steppageResult = await steppageResponse.json();
+  console.log(steppageResult);
+}
+    const pageLabels = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
+    const sectionLabels = [
         ['pageno'],
-        ['pageno', 'part',
-        'repeat'],
+        ['pageno', 'part', 'repeat'],
         ['pageno'],
         ['pageno', 'splitdecision'],
-        ['bagset', 'dontreadrepeat', 'pageno', 'part',
-        'partstep', 'repeat', 'subbuild'],
-        
+        ['bagset', 'dontreadrepeat', 'pageno', 'part', 'partstep', 'repeat', 'subbuild'],
     ];
+<<<<<<< HEAD
     const imageDir = 'model/dataset';
     const indicesp = [2, 4, 66, 2, 346]
     const indicess = [
@@ -58,10 +80,97 @@
       const steppageModel = await tf.loadLayersModel(prefix+'/model/section_type/steppage-model.json');
       return { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel };
     }
+=======
+    let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
+>>>>>>> 0652769570fa2b3b49e64b6c3f6c7ca7e1ecdedb
     async function predictModel(model, tensor){
         return await model.predict(tensor).data();
     }
-    // Utility: get canvas from a PDF page
+    async function loadModels() {
+      await fetchSteppageModel();
+      const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
+      pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
+      finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
+      indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
+      extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
+      decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json')
+      steppageModel = await tf.loadLayersModel(steppageResult);
+      console.log('Models loaded');
+    }
+    async function handlePDF(file) {
+      const pdfData = new Uint8Array(await file.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 });
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const imgTensor = tf.browser.fromPixels(canvas)
+          .resizeNearestNeighbor([64, 64])
+          .toFloat()
+          .div(255)
+          .expandDims(0);
+
+        // PAGE PREDICTION (Single label)
+        const pagePred = pageModel.predict(imgTensor);
+        const pageIndex = (await pagePred.argMax(-1).data());
+        const pageLabel = pageLabels[pageIndex];
+                    let sectionPred = null;
+          const val = pageIndex;
+          if (val > 0.5) {
+            //document.getElementById('results').innerHTML +=  '- PAGE: '+pageLabel+' '+(val)+'\n';
+          
+            let idi = null;
+
+          
+            switch (pageLabel) {
+              case "finish":
+                idi = 0;
+                sectionPred = await predictModel(finishModel, imgTensor);
+                break;
+              case "index":
+                idi = 1;
+                sectionPred = await predictModel(indexModel, imgTensor);
+                break;
+              case "extra":
+                idi = 2;
+                sectionPred = await predictModel(extraModel, imgTensor);
+                break;
+              case "decisionpage":
+                idi = 3;
+                sectionPred = await predictModel(decisionpageModel, imgTensor);
+                break;
+              case "steppage":
+                idi = 4;
+                sectionPred = await predictModel(steppageModel, imgTensor);
+                break;
+            }
+          
+
+        }
+        // SECTION PREDICTION (Multi-label)
+        const sectionCounts = {};
+        if (sectionPred) {
+              sectionPred.forEach((prob, i) => {
+                if (prob > 0.5) {
+                  const label = sectionLabels[i];
+                  sectionCounts[label] = (sectionCounts[label] || 0) + 1;
+                  //document.getElementById('results').innerHTML +=  '- SECTION(s): '+label+' appeared '+sectionCounts+' times\n';
+                }
+              });
+            }
+
+        displayResults(pageNum, pageLabel, sectionCounts);
+        tf.dispose([imgTensor, pagePred, sectionPred]);
+      }
+    }
     async function renderPageToCanvas(pdfPage) {
       const viewport = pdfPage.getViewport({ scale: 2 });
       const canvas = document.createElement('canvas');
@@ -72,8 +181,29 @@
       return canvas;
     }
 
-    document.getElementById("pdf-upload").addEventListener("change", async function (e) {
+    function displayResults(pageNum, pageLabel, sectionCounts) {
+      const container = document.getElementById('results');
+      const block = document.createElement('div');
+      block.className = 'page-block';
+
+      let html = '<strong>Page '+pageNum+':</strong> '+pageLabel+'<br>';
+      if (Object.keys(sectionCounts).length > 0) {
+        html += '<em>Sections:</em><br>';
+        for (const [label, count] of Object.entries(sectionCounts)) {
+          html += '&nbsp;&nbsp;- '+label+': '+count+'<br>';
+        }
+      } else {
+        html += '<em>No section categories detected above threshold.</em>';
+      }
+
+      block.innerHTML = html;
+      container.appendChild(block);
+    }
+
+    document.getElementById('pdfUpload').addEventListener('change', async (e) => {
+      document.getElementById('results').innerHTML = '';
       const file = e.target.files[0];
+<<<<<<< HEAD
       if (!file || file.type !== "application/pdf") {
         log.textContent = "Please upload a valid PDF.";
         return;
@@ -146,6 +276,11 @@
       }
 
       log.textContent += `\nDone processing all pages.`;
+=======
+      if (!file) return;
+      await loadModels();
+      await handlePDF(file);
+>>>>>>> 0652769570fa2b3b49e64b6c3f6c7ca7e1ecdedb
     });
   </script>
 </body>
