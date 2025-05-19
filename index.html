@@ -6,6 +6,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+
   <style>
     body { font-family: sans-serif; margin: 20px; }
     canvas { display: none; }
@@ -19,24 +21,28 @@
   <div id="results"></div>
 
   <script>
+        import * as ort from 'onnxruntime-web';
+
+// Load ONNX model (local or from URL)
+const steppageModel = await ort.InferenceSession.create('steppage.onnx', {
+  executionProviders: ['wasm']  // or ['webgl', 'wasm'] for GPU fallback
+});
+
+// Prepare input tensor
+const inputTensor = new ort.Tensor('float32', inputData, [1, 3, 300, 400]);
+
+// Run inference
+const feeds = { input: inputTensor };
+const results = await session.run(feeds);
+
+// Get outputs
+const boxes = results['boxes'].data;
+const labels = results['labels'].data;
+const scores = results['scores'].data;
+
 let steppageResult = null;
 
-async function fetchSteppageModel() {
-  const steppageResponse = await fetch('https://serverless.roboflow.com/infer/workflows/lego-training-set/detect-count-and-visualize-2', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      api_key: 'VE2nsZZg4DqoHvGWCfRt',
-      inputs: {
-        image: { type: "url", value: "IMAGE_URL" }
-      }
-    })
-  });
-
-  steppageResult = await steppageResponse.json();
-  console.log(steppageResult);
+async function fetchSteppageModel() 
 }
     const pageLabels = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
     const sectionLabels = [
@@ -46,7 +52,6 @@ async function fetchSteppageModel() {
         ['pageno', 'splitdecision'],
         ['bagset', 'dontreadrepeat', 'pageno', 'part', 'partstep', 'repeat', 'subbuild'],
     ];
-<<<<<<< HEAD
     const imageDir = 'model/dataset';
     const indicesp = [2, 4, 66, 2, 346]
     const indicess = [
@@ -66,23 +71,21 @@ async function fetchSteppageModel() {
         return tensor.expandDims(0);
       });
     }
+let onnxSession = null;
 
-    // Example model loader — swap with your trained models if needed
-    async function loadModels() {
-      const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
-      //const prefix = "https://github.com/AutoUpdatingBSoD/LSBPSE";
-      // /const prefix = "";
-      const pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
-      const finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
-      const indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
-      const extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
-      const decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json');
-      const steppageModel = await tf.loadLayersModel(prefix+'/model/section_type/steppage-model.json');
-      return { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel };
-    }
-=======
+async function loadONNXModel() {
+  onnxSession = await ort.InferenceSession.create('steppage.onnx', { executionProviders: ['wasm'] });
+}
+
+async function runONNXModel(inputData) {
+  if (!onnxSession) throw new Error('ONNX model not loaded');
+  // inputData is Float32Array matching your model's input shape, e.g. [1, 3, 64, 64]
+  const inputTensor = new ort.Tensor('float32', inputData, [1, 3, 64, 64]);
+  const output = await onnxSession.run({ input: inputTensor });
+  return output;
+}
+
     let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
->>>>>>> 0652769570fa2b3b49e64b6c3f6c7ca7e1ecdedb
     async function predictModel(model, tensor){
         return await model.predict(tensor).data();
     }
@@ -203,7 +206,6 @@ async function fetchSteppageModel() {
     document.getElementById('pdfUpload').addEventListener('change', async (e) => {
       document.getElementById('results').innerHTML = '';
       const file = e.target.files[0];
-<<<<<<< HEAD
       if (!file || file.type !== "application/pdf") {
         log.textContent = "Please upload a valid PDF.";
         return;
@@ -276,11 +278,9 @@ async function fetchSteppageModel() {
       }
 
       log.textContent += `\nDone processing all pages.`;
-=======
       if (!file) return;
       await loadModels();
       await handlePDF(file);
->>>>>>> 0652769570fa2b3b49e64b6c3f6c7ca7e1ecdedb
     });
   </script>
 </body>
