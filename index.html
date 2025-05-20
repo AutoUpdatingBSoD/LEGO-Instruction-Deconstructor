@@ -20,8 +20,9 @@
   <input type="file" id="pdfUpload" accept=".pdf" />
   <div id="results"></div>
 
-<script type="module">
-  import * as ort from 'onnxruntime-web';
+<script>
+
+
 
   // rest of your code
 </script>
@@ -64,7 +65,7 @@ async function detectExecutionProvider() {
   })();
 
   if (webglSupported) {
-    return ['webgl'];
+    return ['webgl', 'wasm'];
   } else if (typeof ort.env.wasm !== 'undefined') {
     // Check if WASM is supported
     return ['wasm'];
@@ -74,7 +75,6 @@ async function detectExecutionProvider() {
   }
 }
 
-let onnxSession;
 
 async function loadONNXModel(filename) {
   const providers = await detectExecutionProvider();
@@ -83,39 +83,75 @@ async function loadONNXModel(filename) {
   onnxSession = await ort.InferenceSession.create(filename, {
     executionProviders: providers
   });
+  return onnxSession
 }
 
-async function predictONNX(model, tensor) {
-  const transposed = tf.tidy(() => {
-    return tensor.transpose([0, 3, 1, 2]);  // [1, H, W, C] → [1, C, H, W]
-  });
-  const inputData = transposed.dataSync();  // Float32Array
-  const inputTensor = new ort.Tensor('float32', inputData, [1, 3, 64, 64]);
-  const outputMap = await model.run({ input: inputTensor }); // adjust 'input' name if needed
+async function predictONNX(session, tensor, labelList, threshold = 0.5) {
+  const transposed = tf.tidy(() => tensor.transpose([0, 3, 1, 2]));
+  const inputTensor = new ort.Tensor('float32', transposed.dataSync(), [1, 3, 64, 64]);
   tf.dispose(transposed);
 
-  // Assuming single output key:
-  //const firstKey = Object.keys(outputMap)[0];
-  //return outputMap[firstKey].data;
-  return outputMap;
+  const output = await session.run({ input: inputTensor });
+
+  const boxes = output['boxes'].data; // Flattened [N * 4]
+  const scores = output['scores'].data; // Flattened [N * num_classes]
+
+  const numBoxes = boxes.length / 4;
+  const numClasses = labelList.length;
+  const results = [];
+
+  for (let i = 0; i < numBoxes; i++) {
+    const bbox = boxes.slice(i * 4, (i + 1) * 4);
+    const labelScores = scores.slice(i * numClasses, (i + 1) * numClasses);
+    
+    const labels = labelScores
+      .map((prob, idx) => (prob > threshold ? labelList[idx] : null))
+      .filter(Boolean);
+
+    if (labels.length > 0) {
+      results.push({ bbox, labels });
+    }
+  }
+
+  return results;
 }
+
 
 
     let pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel;
     async function predictModel(model, tensor){
         return await model.predict(tensor).data();
     }
-    async function loadModels() {
-      await fetchSteppageModel();
-      const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
-      pageModel =     await tf.loadLayersModel(prefix+'/model/page_type/page-model.json'); // adjust paths
-      finishModel =   await tf.loadLayersModel(prefix+'/model/section_type/finish-model.json');
-      indexModel =    await tf.loadLayersModel(prefix+'/model/section_type/index-model.json');
-      extraModel =    await tf.loadLayersModel(prefix+'/model/section_type/extra-model.json');
-      decisionpageModel =  await tf.loadLayersModel(prefix+'/model/section_type/decisionpage-model.json')
-      steppageModel = await loadONNXModel("https://github.com/AutoUpdatingBSoD/LSBPSE/releases/download/Testing/steppage.onnx");
-      console.log('Models loaded');
-    }
+let steppageSession;
+
+async function loadModels() {
+  const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
+  const [
+    pageModel,
+    finishModel,
+    indexModel,
+    extraModel,
+    decisionpageModel
+  ] = await Promise.all([
+    tf.loadLayersModel(`${prefix}/model/page_type/page-model.json`),
+    tf.loadLayersModel(`${prefix}/model/section_type/finish-model.json`),
+    tf.loadLayersModel(`${prefix}/model/section_type/index-model.json`),
+    tf.loadLayersModel(`${prefix}/model/section_type/extra-model.json`),
+    tf.loadLayersModel(`${prefix}/model/section_type/decisionpage-model.json`)
+  ]);
+
+  steppageSession = await loadONNXModel("https://github.com/AutoUpdatingBSoD/LSBPSE/releases/download/Testing/steppage.onnx");
+
+  return {
+    pageModel,
+    finishModel,
+    indexModel,
+    extraModel,
+    decisionpageModel,
+    steppageSession
+  };
+}
+
     async function handlePDF(file) {
       const pdfData = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
@@ -152,23 +188,23 @@ async function predictONNX(model, tensor) {
         switch (pageLabel) {
           case "finish":
             idi = 0;
-            sectionPred = await predictModel(finishModel, imgTensor);
+            //sectionPred = await predictModel(finishModel, imgTensor);
             break;
           case "index":
             idi = 1;
-            sectionPred = await predictModel(indexModel, imgTensor);
+            //sectionPred = await predictModel(indexModel, imgTensor);
             break;
           case "extra":
             idi = 2;
-            sectionPred = await predictModel(extraModel, imgTensor);
+            //sectionPred = await predictModel(extraModel, imgTensor);
             break;
           case "decisionpage":
             idi = 3;
-            sectionPred = await predictModel(decisionpageModel, imgTensor);
+            //sectionPred = await predictModel(decisionpageModel, imgTensor);
             break;
           case "steppage":
             idi = 4;
-            sectionPred = await predictONNX(steppageModel, imgTensor);  // use ONNX
+            sectionPred = await predictONNX(steppageModel, imgTensor, sectionLabels[idi]);  // use ONNX
             break;
         }
 
@@ -177,17 +213,18 @@ async function predictONNX(model, tensor) {
         }
         // SECTION PREDICTION (Multi-label)
         const sectionCounts = {};
+        let sc = 0;
         if (sectionPred) {
-           const labelsForPage = sectionLabels[pageIndex]; // use the correct label set
-           sectionPred.forEach((prob, i) => {
-             if (prob > 0.5 && labelsForPage[i]) {
-               const label = labelsForPage[i];
-               sectionCounts[label] = (sectionCounts[label] || 0) + 1;
-             }
-           });
+           sectionPred.forEach((result, idx) => {
+            console.log(`Detection ${idx + 1}:`);
+            console.log("  Box:", result.bbox);
+            console.log("  Labels:", result.labels.join(", "));
+            sc = idx;
+          });
+          
         }
 
-        displayResults(pageNum, pageLabel, sectionCounts);
+        //displayResults(pageNum, pageLabel, sectionCounts);
         tf.dispose([imgTensor, pagePred, sectionPred]);
       }
   }
@@ -222,6 +259,7 @@ async function predictONNX(model, tensor) {
 
     document.getElementById('pdfUpload').addEventListener('change', async (e) => {
       document.getElementById('results').innerHTML = '';
+      let log = document.getElementById('results');
       const file = e.target.files[0];
       if (!file || file.type !== "application/pdf") {
         log.textContent = "Please upload a valid PDF.";
