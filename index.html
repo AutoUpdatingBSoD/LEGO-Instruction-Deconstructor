@@ -36,13 +36,6 @@
         ['bagset', 'dontreadpartstep', 'dontreadrepeat', 'extrabag', 'minifig', 'minifigpart', 'numberstep', 'objects', 'pageno', 'partstep', 'repeat', 'step', 'subbuild', 'wholeminiig'],
     ];
     const imageDir = 'model/dataset';
-    const indicesp = [2, 4, 66, 2, 346]
-    const indicess = [
-        [4],
-        [4, 26, 4],
-        [4],
-        [4, 2],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]];
 
     // Your existing function to preprocess the image
     async function processImage(img) {
@@ -99,8 +92,9 @@ async function predictONNX(model, tensor) {
   tf.dispose(transposed);
 
   // Assuming single output key:
-  const firstKey = Object.keys(outputMap)[0];
-  return outputMap[firstKey].data;
+  //const firstKey = Object.keys(outputMap)[0];
+  //return outputMap[firstKey].data;
+  return outputMap;
 }
 
 
@@ -181,19 +175,19 @@ async function predictONNX(model, tensor) {
         // SECTION PREDICTION (Multi-label)
         const sectionCounts = {};
         if (sectionPred) {
-              sectionPred.forEach((prob, i) => {
-                if (prob > 0.5) {
-                  const label = sectionLabels[i];
-                  sectionCounts[label] = (sectionCounts[label] || 0) + 1;
-                  //document.getElementById('results').innerHTML +=  '- SECTION(s): '+label+' appeared '+sectionCounts+' times\n';
-                }
-              });
-            }
+           const labelsForPage = sectionLabels[pageIndex]; // use the correct label set
+           sectionPred.forEach((prob, i) => {
+             if (prob > 0.5 && labelsForPage[i]) {
+               const label = labelsForPage[i];
+               sectionCounts[label] = (sectionCounts[label] || 0) + 1;
+             }
+           });
+        }
 
         displayResults(pageNum, pageLabel, sectionCounts);
         tf.dispose([imgTensor, pagePred, sectionPred]);
       }
-    }
+  }
     async function renderPageToCanvas(pdfPage) {
       const viewport = pdfPage.getViewport({ scale: 2 });
       const canvas = document.createElement('canvas');
