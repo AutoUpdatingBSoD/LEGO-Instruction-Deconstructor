@@ -91,8 +91,11 @@ async function predictONNX(session, tensor, labelList, threshold = 0.5) {
   const inputTensor = new ort.Tensor('float32', transposed.dataSync(), [1, 3, 64, 64]);
   tf.dispose(transposed);
 
-  const output = await session.run({ input: inputTensor });
-
+  // ✅ Get the real input name from the session
+  const inputName = session.inputNames[0];
+console.log(Object.keys(session.inputNames[0]));
+  const output = await session.run({ [inputName]: inputTensor });
+  console.log("ONNX output keys:", Object.keys(output['output0']));
   const boxes = output['boxes'].data; // Flattened [N * 4]
   const scores = output['scores'].data; // Flattened [N * num_classes]
 
@@ -103,7 +106,7 @@ async function predictONNX(session, tensor, labelList, threshold = 0.5) {
   for (let i = 0; i < numBoxes; i++) {
     const bbox = boxes.slice(i * 4, (i + 1) * 4);
     const labelScores = scores.slice(i * numClasses, (i + 1) * numClasses);
-    
+
     const labels = labelScores
       .map((prob, idx) => (prob > threshold ? labelList[idx] : null))
       .filter(Boolean);
@@ -115,6 +118,7 @@ async function predictONNX(session, tensor, labelList, threshold = 0.5) {
 
   return results;
 }
+
 
 
 
