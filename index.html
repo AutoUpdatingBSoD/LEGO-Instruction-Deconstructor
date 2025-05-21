@@ -286,7 +286,7 @@ async function loadModels() {
         for (let idx = 0; idx < pagePred.length; idx++) {
           const val = pagePred[idx];
           if (val > 0.5) {
-            log.textContent += ` - PAGE: ${pageCategories[idx]} (${val.toFixed(2)})\n`;
+            log.textContent += ` - PAGE: ${pageLabels[idx]} (${val.toFixed(2)})\n`;
           
             let idi = null;
             let sectionPred = null;
@@ -294,33 +294,37 @@ async function loadModels() {
             switch (pageCategories[idx]) {
               case "finish":
                 idi = 0;
-                sectionPred = await predictModel(finishModel, tensor);
+                //sectionPred = await predictModel(finishModel, tensor);
                 break;
               case "index":
                 idi = 1;
-                sectionPred = await predictModel(indexModel, tensor);
+                //sectionPred = await predictModel(indexModel, tensor);
                 break;
               case "extra":
                 idi = 2;
-                sectionPred = await predictModel(extraModel, tensor);
+                //sectionPred = await predictModel(extraModel, tensor);
                 break;
               case "decisionpage":
                 idi = 3;
-                sectionPred = await predictModel(decisionpageModel, tensor);
+                //sectionPred = await predictModel(decisionpageModel, tensor);
                 break;
               case "steppage":
                 idi = 4;
-                sectionPred = await predictModel(steppageModel, tensor);
+                sectionPred = await predictONNX(steppageModel, imgTensor, sectionLabels[idi]);  // use ONNX
                 break;
             }
           
-            if (sectionPred) {
-              sectionPred.forEach((valy, idxy) => {
-                if (valy > 0.5) {
-                  log.textContent += `   - SECTION: ${sectionCategories[idi][idxy]} (${valy.toFixed(2)})\n`;
-                }
-              });
-            }
+        const sectionCounts = {};
+        let sc = 0;
+        if (sectionPred) {
+           sectionPred.forEach((result, idx) => {
+            console.log(`Detection ${idx + 1}:`);
+            console.log("  Box:", result.bbox);
+            console.log("  Labels:", result.labels.join(", "));
+            sc = idx;
+          });
+          
+        }
           }
         }
 
