@@ -140,7 +140,7 @@ async function loadModels() {
     tf.loadLayersModel(`${prefix}/model/section_type/decisionpage-model.json`)
   ]);
 
-  steppageSession = await loadONNXModel('${prefix}/model/section_type/steppage.onnx');
+  steppageSession = await loadONNXModel(prefix+'/model/section_type/steppage.onnx');
 
   return {
     pageModel,
