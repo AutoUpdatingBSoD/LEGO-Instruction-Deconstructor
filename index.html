@@ -310,7 +310,7 @@ async function loadModels() {
                 break;
               case "steppage":
                 idi = 4;
-                sectionPred = await predictONNX(steppageModel, imgTensor, sectionLabels[idi]);  // use ONNX
+                sectionPred = await predictONNX(steppageModel, tensor, sectionLabels[idi]);  // use ONNX
                 break;
             }
           
