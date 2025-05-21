@@ -122,7 +122,6 @@ async function predictONNX(session, tensor, labelList, threshold = 0.5) {
     async function predictModel(model, tensor){
         return await model.predict(tensor).data();
     }
-let steppageSession;
 
 async function loadModels() {
   const prefix = "https://autoupdatingbsod.github.io/LSBPSE";
@@ -140,7 +139,7 @@ async function loadModels() {
     tf.loadLayersModel(`${prefix}/model/section_type/decisionpage-model.json`)
   ]);
 
-  const steppageSession = await loadONNXModel(prefix+'/model/section_type/steppage.onnx');
+  const steppageModel = await loadONNXModel(prefix+'/model/section_type/steppage.onnx');
 
   return {
     pageModel,
@@ -148,7 +147,7 @@ async function loadModels() {
     indexModel,
     extraModel,
     decisionpageModel,
-    steppageSession
+    steppageModel
   };
 }
       const { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel } = await loadModels();
