@@ -151,7 +151,7 @@ async function loadModels() {
     steppageSession
   };
 }
-
+      const { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel } = await loadModels();
     async function handlePDF(file) {
       const pdfData = new Uint8Array(await file.arrayBuffer());
       const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
@@ -338,7 +338,7 @@ async function loadModels() {
 
       log.textContent += `\nDone processing all pages.`;
       if (!file) return;
-      await loadModels();
+
       await handlePDF(file);
     });
   </script>
