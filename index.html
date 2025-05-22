@@ -87,36 +87,24 @@ async function loadONNXModel(filename) {
 }
 
 async function predictONNX(session, tensor, labelList, threshold = 0.5) {
-  const transposed = tf.tidy(() => tensor.transpose([0, 3, 1, 2]));
+  const transposed = tf.tidy(() => tensor.transpose([0, 3, 1, 2])); // [1, 3, 64, 64]
   const inputTensor = new ort.Tensor('float32', transposed.dataSync(), [1, 3, 64, 64]);
   tf.dispose(transposed);
 
-  // ✅ Get the real input name from the session
   const inputName = session.inputNames[0];
-console.log(Object.keys(session.inputNames[0]));
   const output = await session.run({ [inputName]: inputTensor });
-  console.log("ONNX output keys:", Object.keys(output['output0']));
-  const boxes = output['boxes'].data; // Flattened [N * 4]
-  const scores = output['scores'].data; // Flattened [N * num_classes]
 
-  const numBoxes = boxes.length / 4;
-  const numClasses = labelList.length;
-  const results = [];
-
-  for (let i = 0; i < numBoxes; i++) {
-    const bbox = boxes.slice(i * 4, (i + 1) * 4);
-    const labelScores = scores.slice(i * numClasses, (i + 1) * numClasses);
-
-    const labels = labelScores
-      .map((prob, idx) => (prob > threshold ? labelList[idx] : null))
-      .filter(Boolean);
-
-    if (labels.length > 0) {
-      results.push({ bbox, labels });
+  const outputTensor = output[session.outputNames[0]]; // ← single output
+  const scores = outputTensor.data;
+  console.log(Object.keys(outputTensor.data));
+  const labels = [];
+  scores.forEach((score, idx) => {
+    if (score > threshold) {
+      labels.push({ label: labelList[idx], score });
     }
-  }
+  });
 
-  return results;
+  return [{ bbox: null, labels }];
 }
 
 
