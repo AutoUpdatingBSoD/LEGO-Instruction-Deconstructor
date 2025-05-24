@@ -28,7 +28,7 @@ function buildPageModel(is) {
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-  model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
+  model.add(tf.layers.dense({ units: is, activation: 'sigmoid' }));
 
   model.compile({
     optimizer: tf.train.adam(),
@@ -87,7 +87,7 @@ function buildModel(outputSize) {
     model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
     model.add(tf.layers.flatten());
     model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: outputSize, activation: 'softmax' }));
+    model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid' }));
 
 model.compile({
   optimizer: tf.train.adam(),
