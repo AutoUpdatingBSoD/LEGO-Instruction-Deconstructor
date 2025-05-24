@@ -7,7 +7,7 @@ Page model pipeline is <a href='https://autoupdatingbsod.github.io/LEGO-Instruct
 
 Section model pipeline is <a href='https://github.com/AutoUpdatingBSoD/LEGO-Instruction-Deconstructor/releases/tag/Testing)'>here</a>.
 
-Python dependencies needed for the section model in python:
+Python dependencies needed for the section model pipeline:
 
 ```pip install tensorflow ultralytics torch```
 
