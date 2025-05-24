@@ -91,7 +91,7 @@ function buildModel(outputSize) {
 
 model.compile({
   optimizer: tf.train.adam(),
-  loss: 'categoricalCrossentropy', // NEW
+  loss: 'sparseCategoricalCrossentropy', // NEW
   metrics: ['accuracy']
 });
 
