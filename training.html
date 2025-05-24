@@ -13,6 +13,8 @@
     <pre id="log"></pre>
 
     <script>
+const IMG_WIDTH = 1024;
+const IMG_HEIGHT = 768;
 
     
 // Example values
@@ -22,7 +24,7 @@ const NUM_CLASSES = pageCategories.length;
 // Build model
 function buildPageModel(is) {
   const model = tf.sequential();
-  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_WIDTH, IMG_HEIGHT, 3] }));
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
@@ -37,21 +39,8 @@ function buildPageModel(is) {
   return model;
 }
 
-    const sectionCategories = [
-        ['pageno'],
-        ['pageno', 'part', 'repeat'],
-        ['pageno'],
-        ['pageno', 'splitdecision'],
-        ['bagset', 'dontreadpartstep', 'dontreadrepeat', 'extrabag', 'minifig', 'minifigpart', 'numberstep', 'objects', 'pageno', 'partstep', 'repeat', 'step', 'subbuild', 'wholeminiig'],
-    ];
     const imageDir = 'https://autoupdatingbsod.github.io/LSBPSE/model/dataset';
     const indicesp = [2, 4, 66, 2, 346]
-    const indicess = [
-        [4],
-        [4, 26, 4],
-        [4],
-        [4, 2],
-        [5, 2, 4, 26, 18, 4, 6]];
 const backends = ['webgl', 'wasm', 'cpu'];
 
 async function loadbackend(){
@@ -77,30 +66,20 @@ async function loadImage(src) {
 }
 
 async function processImage(img) {
-    return tf.tidy(() => {
-        return tf.browser.fromPixels(img)
-  .resizeNearestNeighbor([64, 64])
-  .toFloat()
-  .div(255.0)
-  .expandDims(0);
-
-    });
+  return tf.tidy(() =>
+    tf.browser.fromPixels(img)
+      .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
+      .toFloat()
+      .div(255.0)
+      .expandDims(0)
+  );
 }
-async function processImageS(img) {
-    return tf.tidy(() => {
-        return tf.browser.fromPixels(img)
-  .resizeNearestNeighbor([64, 64])
-  .toFloat()
-  .div(255.0)
-  .expandDims(0);
 
-    });
-}
 function buildModel(outputSize) {
     const model = tf.sequential();
 
     model.add(tf.layers.conv2d({
-        inputShape: [64, 64, 3],
+        inputShape: [IMG_HEIGHT, IMG_WIDTH, 3],
         filters: 16,
         kernelSize: 3,
         activation: 'relu'
@@ -108,11 +87,11 @@ function buildModel(outputSize) {
     model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
     model.add(tf.layers.flatten());
     model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
+    model.add(tf.layers.dense({ units: outputSize, activation: 'softmax' }));
 
 model.compile({
   optimizer: tf.train.adam(),
-  loss: 'sparseCategoricalCrossentropy', // NEW
+  loss: 'categoricalCrossentropy', // NEW
   metrics: ['accuracy']
 });
 
@@ -150,37 +129,6 @@ async function trainModels() {
             pageYs.push(createMultiLabelVector([label], pageCategories.length));
         }
         log.textContent += 'Loaded ' + category + '\n';
-
-        const sectioni = indicess[i];
-        const tempXs = [], tempYs = [];
-
-        for (let l = 0; l < sectioni.length; l++) {
-            const categoryS = sectionCategories[i][l];
-            const count = sectioni[l];
-
-            for (let m = 1; m <= count; m++) {
-                const path = imageDir+'/'+categoryS+'/'+categoryS+' '+m+'.png';
-                const img = await loadImage(path);
-                const tensor = await processImageS(img);
-                tempXs.push(tensor);
-
-                // Assign multi-label based on index or rules
-                let multiLabel;
-                if (i === 4) {
-                    multiLabel = createMultiLabelVector([l, 1], sectionCategories[i].length);
-                } else if (i === 1) {
-                    multiLabel = createMultiLabelVector([l, 2], sectionCategories[i].length);
-                } else if (i === 3) {
-                    multiLabel = createMultiLabelVector([l], sectionCategories[i].length);
-                } else {
-                    multiLabel = createMultiLabelVector([l], sectionCategories[i].length);
-                }
-                tempYs.push(multiLabel);
-            }
-            log.textContent += 'Loaded ' + categoryS + ' of ' + category + '\n';
-        }
-        sectionXs.push(tempXs);
-        sectionYs.push(tempYs);
     }
 
     log.textContent += "Done\n";
@@ -191,24 +139,21 @@ async function trainModels() {
     batchSize: 32,
     shuffle: true,
     validationSplit: 0.1,
-    callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
+    callbacks: [
+        tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true }),
+        {
+            onEpochEnd: (epoch, logs) => {
+              log.textContent += `Epoch ${epoch + 1}: loss = ${logs.loss.toFixed(4)}, acc = ${logs.acc?.toFixed(4)}\n`;
+            }
+          }
+        ] 
+    })
   });
     await pageModel.save('downloads://page-model');
 
-    for (let i = 0; i < sectionCategories.length; i++) {
-        const sectionModel = buildSectionModel(sectionCategories[i].length);
+    log.textContent += 'Model trained and saved!';
+    pageXs.forEach(t => t.dispose());
 
-        await sectionModel.fit(tf.concat(sectionXs[i]), tf.tensor2d(sectionYs[i]), {
-            epochs: 200,
-            batchSize: 32,
-            shuffle: true,
-            validationSplit: 0.1,
-            callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
-  });
-        await sectionModel.save('downloads://' + pageCategories[i] + '-model');
-    }
-
-    log.textContent += 'Models trained and saved!';
 }
 
 
@@ -216,7 +161,189 @@ async function trainModels() {
 // Build section model
 function buildSectionModel(is) {
   const model = tf.sequential();
-  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: 
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LEGO Multi-Label Classifier - Training</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Training LEGO Classifier</h1>
+    <pre id="log"></pre>
+
+    <script>
+const IMG_WIDTH = 1024;
+const IMG_HEIGHT = 768;
+
+    
+// Example values
+const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
+const NUM_CLASSES = pageCategories.length;
+
+// Build model
+function buildPageModel(is) {
+  const model = tf.sequential();
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_HEIGHT, IMG_WIDTH, 3] }));
+  model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+  model.add(tf.layers.flatten());
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
+
+  model.compile({
+    optimizer: tf.train.adam(),
+    loss: 'categoricalCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
+}
+
+    const imageDir = 'https://autoupdatingbsod.github.io/LSBPSE/model/dataset';
+    const indicesp = [2, 4, 66, 2, 346]
+const backends = ['webgl', 'wasm', 'cpu'];
+
+async function loadbackend(){
+  for (const backend of backends) {
+    try {
+      await tf.setBackend(backend);
+      await tf.ready();
+      console.log('Using backend: '+backend);
+      break;
+    } catch (e) {
+      console.warn('Backend '+backend+' not available:, e');
+    }
+  }
+}
+
+async function loadImage(src) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.src = src;
+    });
+}
+
+async function processImage(img) {
+  return tf.tidy(() =>
+    tf.browser.fromPixels(img)
+      .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
+      .toFloat()
+      .div(255.0)
+      .expandDims(0)
+  );
+}
+
+function buildModel(outputSize) {
+    const model = tf.sequential();
+
+    model.add(tf.layers.conv2d({
+        inputShape: [IMG_HEIGHT, IMG_WIDTH, 3],
+        filters: 16,
+        kernelSize: 3,
+        activation: 'relu'
+    }));
+    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+    model.add(tf.layers.flatten());
+    model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+    model.add(tf.layers.dense({ units: outputSize, activation: 'softmax' }));
+
+model.compile({
+  optimizer: tf.train.adam(),
+  loss: 'categoricalCrossentropy', // NEW
+  metrics: ['accuracy']
+});
+
+
+    return model;
+}
+
+function createMultiLabelVector(labels, categoryCount) {
+    const vector = new Array(categoryCount).fill(0);
+    for (const label of labels) {
+        if (label >= 0 && label < categoryCount) {
+            vector[label] = 1;
+        }
+    }
+    return vector;
+}
+
+async function trainModels() {
+    const log = document.getElementById('log');
+    log.textContent = 'Loading images...\n';
+    await loadbackend();
+
+    const pageXs = [], pageYs = [], sectionXs = [], sectionYs = [];
+
+    for (let i = 0; i < indicesp.length; i++) {
+        const label = i;
+        const category = pageCategories[label];
+
+        for (let j = 1; j <= indicesp[i]; j++) {
+            const path = imageDir+'/'+category+'/'+category+' '+j+'.png';
+            const img = await loadImage(path);
+            const tensor = await processImage(img);
+
+            pageXs.push(tensor);
+            pageYs.push(createMultiLabelVector([label], pageCategories.length));
+        }
+        log.textContent += 'Loaded ' + category + '\n';
+    }
+
+    log.textContent += "Done\n";
+
+    const pageModel = buildPageModel(pageCategories.length);
+    await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
+    epochs: 200,
+    batchSize: 32,
+    shuffle: true,
+    validationSplit: 0.1,
+    callbacks: [
+        tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true }),
+        {
+            onEpochEnd: (epoch, logs) => {
+              log.textContent += `Epoch ${epoch + 1}: loss = ${logs.loss.toFixed(4)}, acc = ${logs.acc?.toFixed(4)}\n`;
+            }
+          }
+        ] 
+    })
+  });
+    await pageModel.save('downloads://page-model');
+
+    log.textContent += 'Model trained and saved!';
+    pageXs.forEach(t => t.dispose());
+
+}
+
+
+
+// Build section model
+function buildSectionModel(is) {
+  const model = tf.sequential();
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_HEIGHT, IMG_WIDTH, 3] }));
+  model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+  model.add(tf.layers.flatten());
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: is, activation: 'sigmoid' }));
+
+  model.compile({
+    optimizer: tf.train.adam(),
+    loss: 'binaryCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
+}
+
+trainModels();
+    </script>
+</body>
+</html>
+ }));
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
