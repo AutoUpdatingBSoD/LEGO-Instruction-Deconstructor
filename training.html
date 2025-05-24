@@ -31,7 +31,7 @@ function buildPageModel(is) {
 
   model.compile({
     optimizer: tf.train.adam(),
-    loss: 'categoricalCrossentropy',
+    loss: 'sparseCategoricalCrossentropy',
     metrics: ['accuracy']
   });
 
@@ -76,39 +76,25 @@ async function processImage(img) {
 
     });
 }
-async function processImageS(img) {
-    return tf.tidy(() => {
-        return tf.browser.fromPixels(img)
-  .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
-  .toFloat()
-  .div(255.0)
-  .expandDims(0);
 
-    });
+
+function buildPageModel(is) {
+  const model = tf.sequential();
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_HEIGHT, IMG_WIDTH, 3] }));
+  model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
+  model.add(tf.layers.flatten());
+  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
+
+  model.compile({
+    optimizer: tf.train.adam(),
+    loss: 'sparseCategoricalCrossentropy',
+    metrics: ['accuracy']
+  });
+
+  return model;
 }
-function buildModel(outputSize) {
-    const model = tf.sequential();
 
-    model.add(tf.layers.conv2d({
-        inputShape: [IMG_HEIGHT, IMG_WIDTH, 3],
-        filters: 16,
-        kernelSize: 3,
-        activation: 'relu'
-    }));
-    model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
-    model.add(tf.layers.flatten());
-    model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
-
-model.compile({
-  optimizer: tf.train.adam(),
-  loss: 'sparseCategoricalCrossentropy', // NEW
-  metrics: ['accuracy']
-});
-
-
-    return model;
-}
 
 function createMultiLabelVector(labels, categoryCount) {
     const vector = new Array(categoryCount).fill(0);
@@ -137,7 +123,8 @@ async function trainModels() {
             const tensor = await processImage(img);
 
             pageXs.push(tensor);
-            pageYs.push(createMultiLabelVector([label], pageCategories.length));
+            pageYs.push(label); // ✅ untegers only
+
         }
         log.textContent += 'Loaded ' + category + '\n';
 
@@ -146,13 +133,21 @@ async function trainModels() {
     log.textContent += "Done\n";
 
     const pageModel = buildPageModel(pageCategories.length);
-    await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
-    epochs: 200,
-    batchSize: 32,
-    shuffle: true,
-    validationSplit: 0.1,
-    callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
-  });
+
+
+
+
+const labelTensor = tf.tensor2d(pageYs.map(y => [y]), [pageYs.length, 1], 'float32');
+
+// Training:
+await pageModel.fit(tf.concat(pageXs), labelTensor, {
+  epochs: 200,
+  batchSize: 32,
+  shuffle: true,
+  validationSplit: 0.1,
+  callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
+});
+
     await pageModel.save('downloads://page-model');
 
 
