@@ -246,8 +246,10 @@ async function loadModels() {
 
         // PAGE PREDICTION (Single label)
         const pagePred = pageModel.predict(imgTensor);
-        const pageIndex = (await pagePred.argMax(-1).data());
-        const pageLabel = pageLabels[pageIndex];
+const pageIndexArray = await pagePred.argMax(-1).data();
+const pageIndex = pageIndexArray[0];
+const pageLabel = pageLabels[pageIndex];
+
                     let sectionPred = null;
           const val = pageIndex;
           if (val > 0.5) {
