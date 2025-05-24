@@ -13,14 +13,13 @@
     <pre id="log"></pre>
 
     <script>
-const IMG_WIDTH = 256;
-const IMG_HEIGHT = 192;
 
     
 // Example values
 const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
 const NUM_CLASSES = pageCategories.length;
-
+const IMG_WIDTH = 256;
+const IMG_HEIGHT = 192;
 // Build model
 function buildPageModel(is) {
   const model = tf.sequential();
@@ -28,7 +27,7 @@ function buildPageModel(is) {
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-  model.add(tf.layers.dense({ units: is, activation: 'sigmoid' }));
+  model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
 
   model.compile({
     optimizer: tf.train.adam(),
@@ -39,8 +38,10 @@ function buildPageModel(is) {
   return model;
 }
 
-    const imageDir = 'https://autoupdatingbsod.github.io/LEGO-Instruction-Deconstructor/model/dataset';
-    const indicesp = [2, 4, 70, 2, 341]
+
+    const imageDir = 'https://autoupdatingbsod.github.io/LSBPSE/model/dataset';
+    const indicesp = [2, 4, 66, 2, 346]
+
 const backends = ['webgl', 'wasm', 'cpu'];
 
 async function loadbackend(){
@@ -66,15 +67,25 @@ async function loadImage(src) {
 }
 
 async function processImage(img) {
-  return tf.tidy(() =>
-    tf.browser.fromPixels(img)
-      .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
-      .toFloat()
-      .div(255.0)
-      .expandDims(0)
-  );
-}
+    return tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+  .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
+  .toFloat()
+  .div(255.0)
+  .expandDims(0);
 
+    });
+}
+async function processImageS(img) {
+    return tf.tidy(() => {
+        return tf.browser.fromPixels(img)
+  .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
+  .toFloat()
+  .div(255.0)
+  .expandDims(0);
+
+    });
+}
 function buildModel(outputSize) {
     const model = tf.sequential();
 
@@ -87,7 +98,7 @@ function buildModel(outputSize) {
     model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
     model.add(tf.layers.flatten());
     model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: outputSize, activation: 'sigmoid' }));
+    model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
 
 model.compile({
   optimizer: tf.train.adam(),
@@ -109,12 +120,12 @@ function createMultiLabelVector(labels, categoryCount) {
     return vector;
 }
 
-async function trainModel() {
+async function trainModels() {
     const log = document.getElementById('log');
     log.textContent = 'Loading images...\n';
     await loadbackend();
 
-    const pageXs = [], pageYs = [], sectionXs = [], sectionYs = [];
+    const pageXs = [], pageYs = [];
 
     for (let i = 0; i < indicesp.length; i++) {
         const label = i;
@@ -129,7 +140,8 @@ async function trainModel() {
             pageYs.push(createMultiLabelVector([label], pageCategories.length));
         }
         log.textContent += 'Loaded ' + category + '\n';
-    }
+
+      }
 
     log.textContent += "Done\n";
 
@@ -140,19 +152,19 @@ async function trainModel() {
     shuffle: true,
     validationSplit: 0.1,
     callbacks: tf.callbacks.earlyStopping({ monitor: 'loss', patience: 10, restoreBestWeight: true })
-
-    });
+  });
     await pageModel.save('downloads://page-model');
 
-    log.textContent += 'Model trained and saved!';
-    pageXs.forEach(t => t.dispose());
 
+
+    log.textContent += 'Models trained and saved!';
 }
 
 
 
 
-trainModel();
+
+trainModels();
     </script>
 </body>
 </html>
