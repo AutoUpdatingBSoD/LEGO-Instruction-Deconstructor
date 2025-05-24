@@ -17,12 +17,11 @@
 // Example values
 const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
 const NUM_CLASSES = pageCategories.length;
-const IMG_WIDTH = 256;
-const IMG_HEIGHT = 192;
+
 // Build model
 function buildPageModel(is) {
   const model = tf.sequential();
-  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_HEIGHT, IMG_WIDTH, 3] }));
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
@@ -68,7 +67,7 @@ async function loadImage(src) {
 async function processImage(img) {
     return tf.tidy(() => {
         return tf.browser.fromPixels(img)
-  .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
+  .resizeNearestNeighbor([64, 64])
   .toFloat()
   .div(255.0)
   .expandDims(0);
@@ -80,7 +79,7 @@ function buildModel(outputSize) {
     const model = tf.sequential();
 
     model.add(tf.layers.conv2d({
-        inputShape: [IMG_HEIGHT, IMG_WIDTH, 3],
+        inputShape: [64, 64, 3],
         filters: 16,
         kernelSize: 3,
         activation: 'relu'
@@ -139,8 +138,7 @@ async function trainModels() {
     log.textContent += "Done\n";
 
     const pageModel = buildPageModel(pageCategories.length);
-    await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
-
+await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
     epochs: 200,
     batchSize: 32,
     shuffle: true,
