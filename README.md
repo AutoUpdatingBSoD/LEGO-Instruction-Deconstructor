@@ -1,7 +1,9 @@
 # LEGO-Instruction-Deconstructor
 WORK IN PROGRESS!!!
 
-Page Model Pipeline is <a href='autoupdatingbsod.github.io/LEGO-Instruction-Deconstructor/training.html'>here</a>: 
+Test predictions page is <a href='https://autoupdatingbsod.github.io/LEGO-Instruction-Deconstructor/'>here</a>.
+
+Page Model Pipeline is <a href='https://autoupdatingbsod.github.io/LEGO-Instruction-Deconstructor/training.html'>here</a>: 
 
 Section Model Pipeline is <a href='https://github.com/AutoUpdatingBSoD/LEGO-Instruction-Deconstructor/releases/tag/Testing)'>here</a>:
 
