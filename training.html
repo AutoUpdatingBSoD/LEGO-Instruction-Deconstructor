@@ -31,7 +31,7 @@ function buildPageModel(is) {
 
   model.compile({
     optimizer: tf.train.adam(),
-    loss: 'sparseCategoricalCrossentropy',
+    loss: 'categoricalCrossentropy',
     metrics: ['accuracy']
   });
 
@@ -88,7 +88,7 @@ function buildPageModel(is) {
 
   model.compile({
     optimizer: tf.train.adam(),
-    loss: 'sparseCategoricalCrossentropy',
+    loss: 'categoricalCrossentropy',
     metrics: ['accuracy']
   });
 
@@ -123,7 +123,7 @@ async function trainModels() {
             const tensor = await processImage(img);
 
             pageXs.push(tensor);
-            pageYs.push(label); // ✅ untegers only
+            pageYs.push(createMultiLabelVector([label], pageCategories.length));
 
         }
         log.textContent += 'Loaded ' + category + '\n';
@@ -137,11 +137,11 @@ async function trainModels() {
 
 
 
-const labelTensor = tf.tensor2d(pageYs.map(y => [y]), [pageYs.length, 1], 'float32');
+const labelTensor = tf.tensor2d(pageYs);
 
 // Training:
 await pageModel.fit(tf.concat(pageXs), labelTensor, {
-  epochs: 200,
+  epochs: 50,
   batchSize: 32,
   shuffle: true,
   validationSplit: 0.1,
