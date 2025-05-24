@@ -388,7 +388,7 @@ async function loadModels() {
                 await displayResults(i, pageLabels[idi], sectionPred, tensor);
                 break;
             }
-                log.textContent = pageLabels[idx]+i+'\n';
+
         //const sectionCounts = {};
         //let sc = 0;
         //if (sectionPred) {
@@ -415,7 +415,7 @@ async function loadModels() {
       log.textContent += `\nDone processing all pages.`;
       if (!file) return;
 
-      await handlePDF(file);
+  
     });
   </script>
 </body>
