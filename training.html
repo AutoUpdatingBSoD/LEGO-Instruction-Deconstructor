@@ -1,19 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>LEGO Multi-Label Classifier - Training</title>
+    <title>LEGO Instruction Deconstructor - Training</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; }
     </style>
 </head>
 <body>
-    <h1>Training LEGO Classifier</h1>
+    <h1>Training LEGO Instruction Deconstructor</h1>
     <pre id="log"></pre>
 
     <script>
 
-    
+const IMG_WIDTH = 256;
+const IMG_HEIGHT = 192;
 // Example values
 const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
 const NUM_CLASSES = pageCategories.length;
@@ -21,7 +22,7 @@ const NUM_CLASSES = pageCategories.length;
 // Build model
 function buildPageModel(is) {
   const model = tf.sequential();
-  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [64, 64, 3] }));
+  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_HEIGHT, IMG_WIDTH, 3] }));
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
@@ -67,7 +68,7 @@ async function loadImage(src) {
 async function processImage(img) {
     return tf.tidy(() => {
         return tf.browser.fromPixels(img)
-  .resizeNearestNeighbor([64, 64])
+  .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
   .toFloat()
   .div(255.0)
   .expandDims(0);
@@ -79,7 +80,7 @@ function buildModel(outputSize) {
     const model = tf.sequential();
 
     model.add(tf.layers.conv2d({
-        inputShape: [64, 64, 3],
+        inputShape: [IMG_HEIGHT, IMG_WIDTH, 3],
         filters: 16,
         kernelSize: 3,
         activation: 'relu'
@@ -139,6 +140,7 @@ async function trainModels() {
 
     const pageModel = buildPageModel(pageCategories.length);
 await pageModel.fit(tf.concat(pageXs), tf.tensor2d(pageYs), {
+
     epochs: 200,
     batchSize: 32,
     shuffle: true,
