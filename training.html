@@ -20,26 +20,34 @@ const pageCategories = ['finish', 'index', 'extra', 'decisionpage', 'steppage'];
 const NUM_CLASSES = pageCategories.length;
 
 // Build model
-function buildPageModel(is) {
+function buildPageModel(numClasses) {
   const model = tf.sequential();
-  model.add(tf.layers.conv2d({ filters: 16, kernelSize: 3, activation: 'relu', inputShape: [IMG_HEIGHT, IMG_WIDTH, 3] }));
+  model.add(tf.layers.conv2d({
+    filters: 16,
+    kernelSize: 3,
+    activation: 'relu',
+    inputShape: [IMG_HEIGHT, IMG_WIDTH, 3]
+  }));
   model.add(tf.layers.maxPooling2d({ poolSize: 2 }));
   model.add(tf.layers.flatten());
   model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
-  model.add(tf.layers.dense({ units: is, activation: 'softmax' }));
+
+  // Use sigmoid instead of softmax for multi-label
+  model.add(tf.layers.dense({ units: numClasses, activation: 'sigmoid' }));
 
   model.compile({
     optimizer: tf.train.adam(),
-    loss: 'categoricalCrossentropy',
-    metrics: ['accuracy']
+    loss: 'binaryCrossentropy',
+    metrics: ['accuracy'] // Optional: you can also add custom multi-label metrics
   });
 
   return model;
 }
 
 
+
     const imageDir = 'https://autoupdatingbsod.github.io/LEGO-Instruction-Deconstructor/model/dataset';
-    const indicesp = [2, 4, 30, 2, 50]
+    const indicesp = [2, 4, 70, 2, 341]
 
 const backends = ['webgl', 'wasm', 'cpu'];
 
