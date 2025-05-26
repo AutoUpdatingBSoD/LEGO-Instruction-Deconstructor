@@ -38,7 +38,7 @@ const IMG_HEIGHT = 192;
         ['pageno', 'part', 'repeat'],
         ['pageno'],
         ['pageno', 'splitdecision'],
-        ['bagset', 'dontreadpartstep', 'dontreadrepeat', 'extrabag', 'minifig', 'minifigpart', 'numberstep', 'objects', 'pageno', 'partstep', 'repeat', 'step', 'subbuild', 'wholeminiig'],
+        ['bagset', 'dontreadpartstep', 'dontreadrepeat', 'extrabag', 'minifig', 'minifigpart', 'numberstep', 'objects', 'pageno', 'partstep', 'repeat', 'step', 'subbuild', 'wholeminifig'],
     ];
     const imageDir = 'model/dataset';
 
@@ -96,7 +96,7 @@ await tf.browser.toPixels(tensor, canvas).then(() => {
   ctx.strokeStyle = 'red';
   ctx.font = '16px sans-serif';
   ctx.fillStyle = 'red';
-  console.log(Object.values(boxes));
+  //console.log(Object.values(boxes));
   boxes.forEach((box, i) => {
     const [x, y, w, h] = box;
 
@@ -128,10 +128,7 @@ async function loadONNXModel(filename) {
   });
   return onnxSession
 }
-// Sigmoid helper
-function sigmoid(x) {
-  return 1 / (1 + Math.exp(-x));
-}
+
 async function predictONNX(session, tensor, labelList, threshold = 0.999996) {
   const transposed = tf.tidy(() => tensor.transpose([0, 3, 1, 2])); // [1, 3, 64, 64]
   const inputTensor = new ort.Tensor('float32', transposed.dataSync(), [1, 3, IMG_HEIGHT, IMG_WIDTH]);
@@ -148,9 +145,9 @@ const scores = [];
 
 const raw = outputTensor.data;
 //console.log(Object.values(raw));
-
-const numBoxes = 1008;
 const numClasses = 14;
+const numDims = 4;
+const numBoxes = outputTensor.data.length / (numClasses + numDims);
 
 const xs = raw.slice(0, numBoxes);
 const ys = raw.slice(numBoxes, numBoxes * 2);
@@ -180,7 +177,7 @@ for (let i = 0; i < numBoxes; i++) {
   }
 
   if (maxScore > threshold) {  // Adjust threshold as needed
-    console.log(classId + ": " + maxScore);
+    //console.log(classId + ": " + maxScore);
     boxes.push([xs[i], ys[i], ws[i], hs[i]]);
     scores.push(maxScore);
     classes.push(classId);
@@ -221,101 +218,7 @@ async function loadModels() {
     steppageModel
   };
 }
-    async function handlePDF(file) {
-      
-      let models = await loadModels();
-      pageModel = models.pageModel;
-    finishModel = models.finishModel;
-    indexModel = models.indexModel;
-    extraModel = models.extraModel;
-    decisionpageModel = models.decisionpageModel;
-    steppageModel = models.steppageModel;
 
-      
-     
-      
-      
-      const pdfData = new Uint8Array(await file.arrayBuffer());
-      const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        const imgTensor = tf.browser.fromPixels(canvas)
-          .resizeNearestNeighbor([IMG_HEIGHT, IMG_WIDTH])
-          .toFloat()
-          .div(255)
-          .expandDims(0);
-
-        // PAGE PREDICTION (Single label)
-        const pagePred = pageModel.predict(imgTensor);
-const pageIndexArray = await pagePred.argMax(-1).data();
-const pageIndex = pageIndexArray[0];
-const pageLabel = pageLabels[pageIndex];
-
-                    let sectionPred = null;
-          const val = pageIndex;
-          if (val > 0.5) {
-            //document.getElementById('results').innerHTML +=  '- PAGE: '+pageLabel+' '+(val)+'\n';
-          
-            let idi = null;
-
-          
-        switch (pageLabel) {
-          case "finish":
-            idi = 0;
-            //sectionPred = await predictModel(finishModel, imgTensor);
-            break;
-          case "index":
-            idi = 1;
-            //sectionPred = await predictModel(indexModel, imgTensor);
-            break;
-          case "extra":
-            idi = 2;
-            //sectionPred = await predictModel(extraModel, imgTensor);
-            break;
-          case "decisionpage":
-            idi = 3;
-            //sectionPred = await predictModel(decisionpageModel, imgTensor);
-            break;
-          case "steppage":
-            idi = 4;
-            //sectionPred = await predictONNX(steppageModel, imgTensor, sectionLabels[idi]);  // use ONNX
-            break;
-        }
-
-          
-
-        }
-        // SECTION PREDICTION (Multi-label)
-        //const sectionCounts = {};
-        //let sc = 0;
-        //if (sectionPred) {
-           //sectionPred.forEach((result, idx) => {
-            //console.log(`Detection ${idx + 1}:`);
-            //console.log("  Box:", result.bbox);
-//console.log("  Labels:", result.labels.map(l => l.label).join(", "));
-
-            //sc = idx;
-          //});
-          
-        //}
-
-        //displayResults(pageNum, pageLabel, sectionCounts);
-        tf.dispose([imgTensor, pagePred, sectionPred]);
-        if (i == 13){
-          break;
-        }
-      }
-  }
     async function renderPageToCanvas(pdfPage) {
       const viewport = pdfPage.getViewport({ scale: 2 });
       const canvas = document.createElement('canvas');
@@ -360,8 +263,8 @@ const pageLabel = pageLabels[pageIndex];
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const canvas = await renderPageToCanvas(page);
-        const tensor = await processImage(canvas);
-
+        const imgTensor = await processImage(canvas);
+        const tensor = tf.image.resizeBilinear(imgTensor, [IMG_HEIGHT, IMG_WIDTH]);
         const pagePred = await pageModel.predict(tensor).data();
         //console.log(Object.values(pagePred));
 
