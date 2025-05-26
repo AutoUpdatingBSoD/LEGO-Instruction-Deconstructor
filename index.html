@@ -155,8 +155,9 @@ async function predictONNX(session, tensor, labelList, threshold = 0.5) {
 //console.log('Output length:', outputTensor.data.length);
 //console.log('Output sample:', outputTensor.data.slice(0, 20));
 const raw = outputTensor.data;
+//console.log(Object.values(raw));
 const numChannels = 18;
-const numPreds = 84;
+const numPreds = 100;
 
 const reshaped = [];
 const bbox = [];
@@ -170,7 +171,7 @@ for (let i = 0; i < numPreds; i++) {
 
 for (const row of reshaped) {
   let [x, y, w, h, ...classScores] = row;
-
+  console.log(x, y, w, h, ...classScores);
   // Apply sigmoid to all bbox values (assuming YOLO-style normalized output)
   x = sigmoid(x);
   y = sigmoid(y);
@@ -326,7 +327,7 @@ const pageLabel = pageLabels[pageIndex];
       let html = '<strong>Page '+pageNum+':</strong> '+pageLabel+'<br>';
       if (Object.keys(sectionPred).length > 0) {
         html += '<em>Sections:</em><br>';
-        console.log(Object.keys(sectionPred[0]));
+        //console.log(Object.keys(sectionPred[0]));
         var img = await drawBoxesOnTensorImage(imgTensor.squeeze(), sectionPred[0].boxes, sectionPred[0].labels);
         html += "<img src='"+img+"' alt='Prediction result for page "+pageNum+"' />";
         
@@ -359,7 +360,7 @@ const pageLabel = pageLabels[pageIndex];
         const tensor = await processImage(canvas);
 
         const pagePred = await pageModel.predict(tensor).data();
-        console.log(Object.values(pagePred));
+        //console.log(Object.values(pagePred));
 
         //log.textContent += `\nPage ${i} predictions:\n`;
             let idi = null;
