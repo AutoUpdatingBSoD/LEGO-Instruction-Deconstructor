@@ -96,17 +96,16 @@ await tf.browser.toPixels(tensor, canvas).then(() => {
   ctx.strokeStyle = 'red';
   ctx.font = '16px sans-serif';
   ctx.fillStyle = 'red';
-
+  console.log(Object.values(boxes));
   boxes.forEach((box, i) => {
     const [x, y, w, h] = box;
 
-    const absW = w * width;
-const absH = h * height;
-const absX = (x * width) - absW / 2;
-const absY = (y * height) - absH / 2;
 
-ctx.strokeRect(absX, absY, absW, absH);
-    console.log(absX, absY, absW, absH);
+    const absX = (x) - w / 2;
+    const absY = (y) - h / 2;
+
+    ctx.strokeRect(absX, absY, w, h);
+    //console.log(x, y, w, h);
     // Draw bounding box
 
     // Draw label text
@@ -133,7 +132,7 @@ async function loadONNXModel(filename) {
 function sigmoid(x) {
   return 1 / (1 + Math.exp(-x));
 }
-async function predictONNX(session, tensor, labelList, threshold = 0.5) {
+async function predictONNX(session, tensor, labelList, threshold = 0.999996) {
   const transposed = tf.tidy(() => tensor.transpose([0, 3, 1, 2])); // [1, 3, 64, 64]
   const inputTensor = new ort.Tensor('float32', transposed.dataSync(), [1, 3, IMG_HEIGHT, IMG_WIDTH]);
   tf.dispose(transposed);
@@ -142,49 +141,54 @@ async function predictONNX(session, tensor, labelList, threshold = 0.5) {
   const output = await session.run({ [inputName]: inputTensor });
 
   const outputTensor = output[session.outputNames[0]]; // ← single output
-
-  //console.log(Object.values(outputTensor.data));
-  const labels = [];
+const boxes = [];
+const scores = [];
+  const classes = [];
   const firstBox = outputTensor.data.slice(0, 18);
-//console.log('First prediction raw data:', firstBox);
 
-//      console.log('Output shape:', outputTensor.dims[0]);
-//    console.log('Output shape:', outputTensor.dims[2]);
-//  console.log('Output shape:', outputTensor.dims[1]);  // e.g. [N, M] or [N, 6] etc
-//      console.log('Output shape:', Object.keys(outputTensor.cpuData));
-//console.log('Output length:', outputTensor.data.length);
-//console.log('Output sample:', outputTensor.data.slice(0, 20));
 const raw = outputTensor.data;
 //console.log(Object.values(raw));
-const numChannels = 18;
-const numPreds = 100;
 
-const reshaped = [];
-const bbox = [];
-for (let i = 0; i < numPreds; i++) {
-  const row = [];
-  for (let j = 0; j < numChannels; j++) {
-    row.push(raw[j * numPreds + i]);  // Transpose: [channel][prediction]
+const numBoxes = 1008;
+const numClasses = 14;
+
+const xs = raw.slice(0, numBoxes);
+const ys = raw.slice(numBoxes, numBoxes * 2);
+const ws = raw.slice(numBoxes * 2, numBoxes * 3);
+const hs = raw.slice(numBoxes * 3, numBoxes * 4);
+
+// Build [class][box] confidence map
+const classScores = [];
+for (let c = 0; c < numClasses; c++) {
+  const start = numBoxes * 4 + c * numBoxes;
+  const end = start + numBoxes;
+  classScores.push(raw.slice(start, end));
+}
+
+// Now iterate per box
+for (let i = 0; i < numBoxes; i++) {
+  let maxScore = -Infinity;
+  let classId = -1;
+
+  for (let c = 0; c < numClasses; c++) {
+    const score = 1 - classScores[c][i];
+    if (score > maxScore) {
+      maxScore = score;
+      
+      classId = labelList[c];
+    }
   }
-  reshaped.push(row);
+
+  if (maxScore > threshold) {  // Adjust threshold as needed
+    console.log(classId + ": " + maxScore);
+    boxes.push([xs[i], ys[i], ws[i], hs[i]]);
+    scores.push(maxScore);
+    classes.push(classId);
+  }
 }
 
-for (const row of reshaped) {
-  let [x, y, w, h, ...classScores] = row;
-  console.log(x, y, w, h, ...classScores);
-  // Apply sigmoid to all bbox values (assuming YOLO-style normalized output)
-  x = sigmoid(x);
-  y = sigmoid(y);
-  w = sigmoid(w);
-  h = sigmoid(h);
 
-  const bestClassIndex = classScores.indexOf(Math.max(...classScores));
-  const label = labelList[bestClassIndex];
-
-  labels.push({ label });
-  bbox.push([x, y, w, h]); // Normalized values
-}
-  return [{ boxes: bbox, labels: labels }];
+  return [{ boxes: boxes, labels: classes }];
 }
 
 
@@ -284,7 +288,7 @@ const pageLabel = pageLabels[pageIndex];
             break;
           case "steppage":
             idi = 4;
-            sectionPred = await predictONNX(steppageModel, imgTensor, sectionLabels[idi]);  // use ONNX
+            //sectionPred = await predictONNX(steppageModel, imgTensor, sectionLabels[idi]);  // use ONNX
             break;
         }
 
@@ -307,6 +311,9 @@ const pageLabel = pageLabels[pageIndex];
 
         //displayResults(pageNum, pageLabel, sectionCounts);
         tf.dispose([imgTensor, pagePred, sectionPred]);
+        if (i == 13){
+          break;
+        }
       }
   }
     async function renderPageToCanvas(pdfPage) {
@@ -321,22 +328,18 @@ const pageLabel = pageLabels[pageIndex];
 
     async function displayResults(pageNum, pageLabel, sectionPred, imgTensor) {
       const container = document.getElementById('results');
-      const block = document.createElement('div');
-      block.className = 'page-block';
 
-      let html = '<strong>Page '+pageNum+':</strong> '+pageLabel+'<br>';
+
+      container.innerHTML += '<br><br><strong>Page '+pageNum+':</strong> '+pageLabel+'<br>';
       if (Object.keys(sectionPred).length > 0) {
-        html += '<em>Sections:</em><br>';
+        container.innerHTML += '<em>Sections:</em><br>';
         //console.log(Object.keys(sectionPred[0]));
-        var img = await drawBoxesOnTensorImage(imgTensor.squeeze(), sectionPred[0].boxes, sectionPred[0].labels);
-        html += "<img src='"+img+"' alt='Prediction result for page "+pageNum+"' />";
+        container.innerHTML += "<img src='"+(await drawBoxesOnTensorImage(imgTensor.squeeze(), sectionPred[0].boxes, sectionPred[0].labels))+"' alt='Prediction result for page "+pageNum+"' /><br>";
         
       } else {
-        html += '<em>No section categories detected above threshold.</em>';
+        container.innerHTML += '<em>No section categories detected above threshold.</em>';
       }
 
-      block.innerHTML = html;
-      container.appendChild(block);
     }
 
     document.getElementById('pdfUpload').addEventListener('change', async (e) => {
@@ -348,7 +351,7 @@ const pageLabel = pageLabels[pageIndex];
         return;
       }
 
-      log.textContent = `Loading models and reading PDF...\n`;
+      log.textContent = `Loading models and reading PDF...`;
 
       const { pageModel, finishModel, indexModel, extraModel, decisionpageModel, steppageModel } = await loadModels();
       const fileURL = URL.createObjectURL(file);
