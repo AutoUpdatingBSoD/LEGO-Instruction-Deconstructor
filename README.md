@@ -22,7 +22,9 @@ Though torch is technically optional, all I really use it for is GPU Acceleratio
 
 
 
-A YoloV5 or YoloV8 untrained but properly labelled dataset from Roboflow is also needed
+~~A YoloV5 or YoloV8 untrained but properly labelled dataset from Roboflow is also needed~~
+
+I'm currently experimenting with switching to Label Studio. Roboflow has some issues. This project is not dead, matter of fact I'm very far into relabelling everything in Label-Studio. But I still have a ways to go and it will be a while before a new code release gets pushed.
 
 XML Format for Output is <a href='https://www.bricklink.com/help.asp?helpID=207'> here</a>.
 
